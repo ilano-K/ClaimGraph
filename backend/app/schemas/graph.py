@@ -5,7 +5,7 @@ from app.schemas.node import GraphNode, GraphEdge
 class DocumentMetadata(BaseModel):
     title: str = Field(default="Untitled Document")
     author: Optional[List[str]] = Field(default_factory=list)
-    token_count = int = Field(default=0)
+    token_count: int = Field(default=0)
 
 """ 
 Returned by the LLM extraction pipeline.
