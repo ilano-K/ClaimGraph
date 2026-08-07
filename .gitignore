@@ -1,0 +1,10 @@
+# virtual environments
+venv/
+
+# environment variables
+.env
+
+#logs 
+*.log 
+
+requirements.txt
