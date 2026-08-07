@@ -8,3 +8,7 @@ venv/
 *.log 
 
 requirements.txt
+
+# tests
+
+tests/

@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field 
 from app.schemas.node import GraphNode
 from app.schemas.graph import DocumentMetadata, GraphPayload
-from app.enums.node import NodeCategory, EdgeRelation
+from app.enums.node import EdgeRelation
 from typing import Dict, List
 
 class ReactFlowStyle(BaseModel):
