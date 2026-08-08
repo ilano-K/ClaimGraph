@@ -16,10 +16,25 @@ body {
   border-left: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+.graph-viewport:fullscreen {
+  background-color: #090d16;
+  background-image: radial-gradient(circle at 2px 2px, rgba(255, 255, 255, 0.05) 1px, transparent 0);
+  background-size: 24px 24px;
+}
+
 .node-card {
   background: rgba(15, 19, 28, 0.9);
   border: 1px solid #1e293b; /* Slate-800 */
-  transition: all 0.2s ease-in-out;
+  /* Only the hover visuals (lift + shadow) animate; position (top/left) is
+     set directly by drags and must never be eased, or cards lag behind the
+     pointer and snap forward. */
+  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.node-card.dragging,
+.node-card.dragging:hover {
+  transition: none;
+  transform: none;
 }
 
 .node-card:hover {
@@ -49,6 +64,31 @@ body {
 .connection-line.highlighted {
   stroke: rgba(255, 255, 255, 0.4);
   stroke-width: 3;
+}
+
+/* Edge arrowheads */
+.edge-arrow {
+  fill: rgba(140, 144, 159, 0.5);
+}
+
+.edge-arrow.highlighted {
+  fill: rgba(255, 255, 255, 0.55);
+}
+
+/* Edge relation labels */
+.edge-label rect {
+  fill: rgba(15, 19, 28, 0.92);
+  stroke: #334155;
+  stroke-width: 1;
+}
+
+.edge-label text {
+  fill: #cbd5e1;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  pointer-events: none;
 }
 
 @keyframes dash {

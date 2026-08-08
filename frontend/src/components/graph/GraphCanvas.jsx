@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import NodeCard from './NodeCard.jsx'
 import ConnectionLines from './ConnectionLines.jsx'
 import FloatingControls from './FloatingControls.jsx'
-import { buildEdgePath, worldBounds } from '../../lib/graphGeometry.js'
+import { buildEdgePath, edgeMidpoint, worldBounds } from '../../lib/graphGeometry.js'
 import { clamp } from '../../lib/utils.js'
 
 const MIN_SCALE = 0.25
@@ -30,6 +30,28 @@ export default function GraphCanvas({
   const hasFittedRef = useRef(false)
   const [view, setView] = useState({ x: 0, y: 0, scale: 1 })
   const [nodeSizes, setNodeSizes] = useState({})
+  const [draggingNodeId, setDraggingNodeId] = useState(null)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+
+  useEffect(() => {
+    const handleFullscreenChange = () => setIsFullscreen(Boolean(document.fullscreenElement))
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  }, [])
+
+  const toggleFullscreen = useCallback(async () => {
+    const el = viewportRef.current
+    if (!el) return
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen()
+      } else if (el.requestFullscreen) {
+        await el.requestFullscreen()
+      }
+    } catch {
+      return
+    }
+  }, [])
 
   useEffect(() => {
     viewRef.current = view
@@ -68,7 +90,11 @@ export default function GraphCanvas({
         const source = sizedNodes.find((n) => n.id === edge.source)
         const target = sizedNodes.find((n) => n.id === edge.target)
         if (!source || !target) return edge
-        return { ...edge, path: buildEdgePath(source, target) }
+        return {
+          ...edge,
+          path: buildEdgePath(source, target),
+          label: edgeMidpoint(source, target),
+        }
       }),
     [edges, sizedNodes]
   )
@@ -168,6 +194,11 @@ export default function GraphCanvas({
 
   const handleViewportPointerDown = useCallback((e) => {
     if (e.button !== 0) return
+    const target = e.target
+    if (target && typeof target.closest === 'function') {
+      const interactive = target.closest('button, input, select, textarea, a, [role="button"]')
+      if (interactive) return
+    }
     const el = viewportRef.current
     if (!el) return
     el.setPointerCapture(e.pointerId)
@@ -204,6 +235,7 @@ export default function GraphCanvas({
         scale: viewRef.current.scale,
       }
       onSelectNode(node.id)
+      setDraggingNodeId(node.id)
     },
     [onSelectNode]
   )
@@ -235,6 +267,7 @@ export default function GraphCanvas({
       const drag = dragRef.current
       if (!drag || e.pointerId !== drag.pointerId) return
       dragRef.current = null
+      setDraggingNodeId(null)
       const el = viewportRef.current
       if (el && el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId)
     },
@@ -244,10 +277,11 @@ export default function GraphCanvas({
   return (
     <div
       ref={viewportRef}
-      className="flex-1 relative overflow-hidden touch-none select-none"
+      className="graph-viewport flex-1 relative overflow-hidden touch-none select-none"
       onPointerDown={handleViewportPointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
     >
       <div
         className="absolute top-0 left-0"
@@ -262,6 +296,7 @@ export default function GraphCanvas({
             key={node.id}
             node={node}
             isActive={node.id === activeNodeId}
+            isDragging={node.id === draggingNodeId}
             onSelect={onSelectNode}
             onHover={onHoverNode}
             onMeasure={handleNodeMeasure}
@@ -273,6 +308,8 @@ export default function GraphCanvas({
         onZoomIn={() => zoomCenter(1.2)}
         onZoomOut={() => zoomCenter(1 / 1.2)}
         onFit={fitToContent}
+        onToggleFullscreen={toggleFullscreen}
+        isFullscreen={isFullscreen}
       />
     </div>
   )
