@@ -29,7 +29,7 @@ function NavItem({ item }) {
   )
 }
 
-export default function TopNavBar({ metadata }) {
+export default function TopNavBar({ metadata, onNavigateToDashboard }) {
   return (
     <header className="flex justify-between items-center px-gutter h-16 bg-surface/60 backdrop-blur-xl border-b border-white/10 shrink-0">
       {/* Left: Brand & Document Info */}
@@ -70,6 +70,14 @@ export default function TopNavBar({ metadata }) {
         >
           <Icon name="upload_file" className="!text-[18px]" />
           <span className="hidden sm:inline">Analyze PDF</span>
+        </button>
+        <button
+          type="button"
+          className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-white/5 rounded-lg transition-all"
+          aria-label="Dashboard"
+          onClick={onNavigateToDashboard}
+        >
+          <Icon name="home" />
         </button>
         <button
           type="button"
