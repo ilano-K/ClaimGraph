@@ -151,3 +151,92 @@ body {
   background: rgba(140, 144, 159, 0.3);
   border-radius: 3px;
 }
+
+/* ---- Onboarding flow (mirrors onboarding.html) ---- */
+
+/* Step 1 (Welcome): subtle grid canvas */
+.bg-grid-slate {
+  background-image:
+    linear-gradient(to right, rgba(140, 144, 159, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(140, 144, 159, 0.05) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Steps 3/4 (processing/ready): coarser grid */
+.grid-bg {
+  background-size: 40px 40px;
+  background-image: linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+}
+
+/* Primary action glow used on the welcome CTA */
+.kinetic-glow {
+  box-shadow: 0 0 15px rgba(77, 142, 255, 0.3);
+  transition: box-shadow 0.3s ease;
+}
+.kinetic-glow:hover {
+  box-shadow: 0 0 25px rgba(77, 142, 255, 0.5);
+}
+
+/* Success halo around the ready check */
+.glow-success {
+  box-shadow: 0 0 20px rgba(78, 222, 163, 0.4);
+}
+
+/* Pulsing primary progress bar (processing step) */
+@keyframes pulse-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 10px rgba(173, 198, 255, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(173, 198, 255, 0.8);
+  }
+}
+.animate-pulse-glow {
+  animation: pulse-glow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Scanning sweep used on "Extracting" tiles and progress bars */
+@keyframes scanning {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(200%);
+  }
+}
+.scan-line::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+  animation: scanning 2s infinite linear;
+}
+
+/* Document summary card (ready step). Distinct from the graph node-card. */
+.onboarding-doc-card {
+  background-color: #181b25;
+  border: 1px solid #31353f;
+  transition: all 0.2s ease;
+}
+.onboarding-doc-card:hover {
+  border-color: #4edea3;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(78, 222, 163, 0.1);
+}
+
+/* Step-in stagger used by the ready document cards */
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.slide-in-card {
+  animation: slide-in 0.4s ease forwards;
+}
