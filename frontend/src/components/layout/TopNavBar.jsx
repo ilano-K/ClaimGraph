@@ -86,13 +86,6 @@ export default function TopNavBar({ metadata, onNavigateToDashboard }) {
         >
           <Icon name="settings" />
         </button>
-        <button
-          type="button"
-          className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-white/5 rounded-lg transition-all"
-          aria-label="Account"
-        >
-          <Icon name="account_circle" />
-        </button>
       </div>
     </header>
   )
