@@ -5,7 +5,11 @@ from pathlib import Path
 # without the real .env key (os.environ has higher precedence than .env).
 os.environ["LLM_PROVIDER"] = "openai"
 os.environ["LLM_API_KEY"] = "test-key"
-os.environ["LLM_MODEL_NAME"] = "test-model"
+os.environ["LLM_MODEL"] = "test-model"
+
+# Stray harness env var (LLM_MODEL_NAME) fractures pydantic-settings, which
+# forbids unknown env inputs. Remove it so app.core.settings imports cleanly.
+os.environ.pop("LLM_MODEL_NAME", None)
 
 import torch
 
