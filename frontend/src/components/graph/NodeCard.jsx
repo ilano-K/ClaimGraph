@@ -10,6 +10,7 @@ import { NODE_TONES } from '../../data/mockData.js'
 function NodeCard({
   node,
   isActive,
+  isDragging,
   onSelect,
   onHover,
   onMeasure,
@@ -41,7 +42,8 @@ function NodeCard({
       className={cn(
         'absolute node-card rounded-lg p-4 z-10 flex flex-col gap-3 cursor-grab active:cursor-grabbing',
         tone.card,
-        isActive && 'active'
+        isActive && 'active',
+        isDragging && 'dragging'
       )}
       style={{ top: presentation.y, left: presentation.x, width: presentation.width }}
       onPointerDown={(e) => onNodePointerDown(node, e)}

@@ -33,9 +33,24 @@ function anchorPoint(node, other) {
 }
 
 /**
- * Builds a smooth cubic-bezier edge path between two live nodes.
+ * Moves a point `distance` (px) toward `toward`, returning a new point.
  */
-export function buildEdgePath(source, target) {
+function insetPoint(point, toward, distance) {
+  const dx = toward.x - point.x
+  const dy = toward.y - point.y
+  const len = Math.hypot(dx, dy)
+  if (len === 0) return { x: point.x, y: point.y }
+  const f = distance / len
+  return { x: point.x + dx * f, y: point.y + dy * f }
+}
+
+/**
+ * Computes the cubic bezier control points for an edge between two live nodes.
+ * The endpoint anchors are pulled `inset` px toward the curve so an arrowhead
+ * rendered at the end stays visible just outside the target card (cards are
+ * HTML elements painted above the SVG and would otherwise hide the tip).
+ */
+function edgeControlPoints(source, target, inset = 10) {
   const start = anchorPoint(source, target)
   const end = anchorPoint(target, source)
 
@@ -50,10 +65,37 @@ export function buildEdgePath(source, target) {
     ? { x: end.x - dx * 0.35, y: end.y }
     : { x: end.x, y: end.y - dy * 0.35 }
 
+  return {
+    start: insetPoint(start, c1, inset),
+    c1,
+    c2,
+    end: insetPoint(end, c2, inset),
+  }
+}
+
+/**
+ * Builds a smooth cubic-bezier edge path between two live nodes.
+ */
+export function buildEdgePath(source, target) {
+  const { start, c1, c2, end } = edgeControlPoints(source, target)
   return [
     `M ${start.x} ${start.y}`,
     `C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${end.x} ${end.y}`,
   ].join(' ')
+}
+
+/**
+ * The point at the middle (t = 0.5) of an edge's curve, in world
+ * coordinates. Used to anchor edge labels on the path itself.
+ */
+export function edgeMidpoint(source, target) {
+  const { start, c1, c2, end } = edgeControlPoints(source, target)
+  const t = 0.5
+  const mt = 1 - t
+  return {
+    x: mt * mt * mt * start.x + 3 * mt * mt * t * c1.x + 3 * mt * t * t * c2.x + t * t * t * end.x,
+    y: mt * mt * mt * start.y + 3 * mt * mt * t * c1.y + 3 * mt * t * t * c2.y + t * t * t * end.y,
+  }
 }
 
 /**

@@ -167,8 +167,8 @@ export const mockEdges = [
   },
   {
     id: 'edge_2',
-    source: 'node_2',
-    target: 'node_3',
+    source: 'node_3',
+    target: 'node_2',
     relation: 'supports',
     reasoning:
       'Backend chaos benchmark evidence directly validates the availability properties claimed by the system architecture.',
