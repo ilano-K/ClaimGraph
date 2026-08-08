@@ -1,0 +1,99 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles preserved from the reference stitch.html design */
+body {
+  background-color: #090d16; /* Slate-950 base */
+  background-image: radial-gradient(circle at 2px 2px, rgba(255, 255, 255, 0.05) 1px, transparent 0);
+  background-size: 24px 24px;
+}
+
+.glass-panel {
+  background: rgba(15, 19, 28, 0.6); /* Slate-900 at 60% */
+  backdrop-filter: blur(12px);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.node-card {
+  background: rgba(15, 19, 28, 0.9);
+  border: 1px solid #1e293b; /* Slate-800 */
+  transition: all 0.2s ease-in-out;
+}
+
+.node-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+}
+
+/* Connecting lines */
+.svg-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.connection-line {
+  stroke: rgba(140, 144, 159, 0.3); /* outline at 30% */
+  stroke-width: 2;
+  fill: none;
+  stroke-dasharray: 4 4;
+  animation: dash 20s linear infinite;
+}
+
+.connection-line.highlighted {
+  stroke: rgba(255, 255, 255, 0.4);
+  stroke-width: 3;
+}
+
+@keyframes dash {
+  to {
+    stroke-dashoffset: -100;
+  }
+}
+
+/* Specific node accent borders */
+.node-red {
+  border-top: 2px solid #ef4444;
+}
+.node-red.active {
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.2);
+}
+
+.node-blue {
+  border-top: 2px solid #3b82f6;
+}
+.node-blue.active {
+  box-shadow: 0 0 15px rgba(59, 130, 246, 0.2);
+}
+
+.node-green {
+  border-top: 2px solid #10b981;
+}
+.node-green.active {
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.2);
+}
+
+.node-purple {
+  border-top: 2px solid #8b5cf6;
+}
+.node-purple.active {
+  box-shadow: 0 0 15px rgba(139, 92, 246, 0.2);
+}
+
+/* Minimal scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(140, 144, 159, 0.3);
+  border-radius: 3px;
+}
