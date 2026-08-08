@@ -1,5 +1,8 @@
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from app.api.graphs import router as graphs_router
+from app.core.exceptions import AppException
 import logging 
 import uvicorn
 
@@ -14,7 +17,7 @@ logger.info("Backend starting...")
 
 app = FastAPI(title="ClaimGraph")
 
-app.middleware(
+app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], # Allows all origins
     allow_credentials=True,
@@ -22,7 +25,15 @@ app.middleware(
     allow_headers=["*"], 
 )
 
+app.include_router(graphs_router)
+
 # add exception handler here
+@app.exception_handler(AppException)
+def app_exception_handler(req: Request, exc: AppException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail}
+    )
 
 if __name__ == "__main__":
     logger.info("Starting uvicorn server")

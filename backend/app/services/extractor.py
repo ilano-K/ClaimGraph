@@ -8,41 +8,45 @@ from app.schemas.api import CompileGraphResponse
 from app.services.verify_quotes import find_nodes_with_invalid_quotes
 from app.schemas.api import ReactFlowNode, ReactFlowEdge, ReactFlowStyle
 from app.enums.node import EdgeRelation
+from app.core.exceptions import GraphCompilationError
 from typing import List
 
 def process_compile_graph(file_path: str):
-    document_markdown = parse_document_to_markdown(file_path)
+    try:
+        document_markdown = parse_document_to_markdown(file_path)
+            
+        claim_graph = generate_claim_graph(document_markdown)
+        
+        # get list of invalid node ids
+        invalid_node_ids = {
+            node.id for node in find_nodes_with_invalid_quotes(document_markdown, claim_graph.nodes)
+        }
+        valid_nodes = [
+            n for n in claim_graph.nodes if n.id not in invalid_node_ids
+        ]
+        valid_edges = [
+            e for e in claim_graph.edges 
+            if e.source not in invalid_node_ids and e.target not in invalid_node_ids
+        ]
+        
+        
+        # keep only valid nodes and edges
+        claim_graph.nodes = valid_nodes
+        claim_graph.edges = valid_edges
     
-    claim_graph = generate_claim_graph(document_markdown)
+        react_flow_nodes = to_react_flow_nodes(claim_graph.nodes)
+        react_flow_edges = to_react_flow_edges(claim_graph.edges)
     
-    # get list of invalid node ids
-    invalid_node_ids = {
-        node.id for node in find_nodes_with_invalid_quotes(document_markdown, claim_graph.nodes)
-    }
-    valid_nodes = [
-        n for n in claim_graph.nodes if n.id not in invalid_node_ids
-    ]
-    valid_edges = [
-        e for e in claim_graph.edges 
-        if e.source not in invalid_node_ids and e.target not in invalid_node_ids
-    ]
-    
-    
-    # keep only valid nodes and edges
-    claim_graph.nodes = valid_nodes
-    claim_graph.edges = valid_edges
-
-    react_flow_nodes = to_react_flow_nodes(claim_graph.nodes)
-    react_flow_edges = to_react_flow_edges(claim_graph.edges)
-
-    return CompileGraphResponse(
-        success=True,
-        summary=claim_graph.executive_summary,
-        metadata=claim_graph.metadata,
-        graph=claim_graph,
-        react_flow_nodes=react_flow_nodes,
-        react_flow_edges=react_flow_edges,
-    )
+        return CompileGraphResponse(
+            success=True,
+            summary=claim_graph.executive_summary,
+            metadata=claim_graph.metadata,
+            graph=claim_graph,
+            react_flow_nodes=react_flow_nodes,
+            react_flow_edges=react_flow_edges,
+        )
+    except:
+        raise GraphCompilationError()
 
 
 def to_react_flow_nodes(nodes: List[GraphNode]) -> List[ReactFlowNode]:
@@ -87,7 +91,7 @@ def generate_claim_graph(document):
     client = create_client()
     
     result = client.chat.completions.create(
-        model = settings.llm_model,
+        model = settings.llm_model_name,
         response_model=GraphPayload,
         messages=[
         {

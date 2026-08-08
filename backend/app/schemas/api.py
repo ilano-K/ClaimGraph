@@ -48,6 +48,8 @@ class ReactFlowEdge(BaseModel):
         description="Color and width styling properties."
     )
 
+class CompileGraphRequest(BaseModel):
+    file_path: str
 
 class CompileGraphResponse(BaseModel):
     """
