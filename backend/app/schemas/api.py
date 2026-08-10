@@ -1,3 +1,5 @@
+"""HTTP-layer request/response schemas for the public API."""
+
 from pydantic import BaseModel, Field 
 from app.schemas.node import GraphNode
 from app.schemas.graph import DocumentMetadata, GraphPayload, DocumentAnalysis
@@ -49,6 +51,8 @@ class ReactFlowEdge(BaseModel):
     )
 
 class CompileGraphRequest(BaseModel):
+    """Body of ``POST /graphs/compile``; accepts one or more file paths."""
+
     file_paths: List[str] = Field(default_factory=list, description="Accept multiple files")
 
 class CompileGraphResponse(BaseModel):

@@ -1,3 +1,10 @@
+"""System prompt for the graph-extraction LLM.
+
+Instructs the model to decompose one or more technical documents into a
+verifiable argumentation graph (nodes, edges, executive summaries) while
+preserving the pipeline-assigned ``document_id`` and strict verbatim quotes.
+"""
+
 SYSTEM_PROMPT = """
 You are ClaimGraph Engine, an elite technical auditor and computer systems literature compiler. Your job is to analyze technical papers, RFCs, and software proposals, decomposing their narrative into an interactive, verifiable argumentation graph.
 

@@ -1,3 +1,11 @@
+"""Shared pytest fixtures and environment setup.
+
+Before any ``app.*`` import, this module seeds the LLM settings via
+environment variables (which outrank the ``.env`` file) and disables
+torch Inductor JIT so Docling's layout pass runs without MSVC. It also
+builds minimal fake PDFs whose sentences are preserved verbatim by Docling,
+which the graph-compile tests rely on for quote validation.
+"""
 import os
 from pathlib import Path
 

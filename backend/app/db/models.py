@@ -1,3 +1,8 @@
+"""SQLAlchemy ORM models for workspaces and their documents.
+
+The Workspace row backs the workspace cards on the dashboard and holds the
+compiled graph payload; Document rows track per-file state inside a workspace.
+"""
 from datetime import datetime, timezone
 from app.db.database import Base
 from sqlalchemy import (
@@ -10,11 +15,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.enums.workspace import IngressMode, WorkspaceStatus
 from typing import Optional, Dict, Any, List
 
-""" 
-Populates the Workspace Cards on the dashboard.
-Holds documents, graphs--nodes & edges
-"""
 class Workspace(Base):
+    """A single workspace; populates the dashboard cards and holds documents."""
+
     __tablename__ = "workspaces"
     id: Mapped[str] = mapped_column(String, primary_key=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
@@ -29,6 +32,7 @@ class Workspace(Base):
         default=WorkspaceStatus.EMPTY, 
     )
     
+    # Serialized GraphPayload for the workspace once compilation succeeds.
     graph_payload: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
     
     documents: Mapped[List["Document"]] = relationship(
@@ -49,6 +53,8 @@ class Workspace(Base):
     
 
 class Document(Base):
+    """A source file uploaded to a workspace, with extracted-node counts."""
+
     __tablename__ = "documents"
     id: Mapped[str]= mapped_column(String, primary_key=True)
     workspace: Mapped["Workspace"] = relationship(back_populates="documents")

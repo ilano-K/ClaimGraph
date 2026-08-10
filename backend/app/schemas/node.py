@@ -1,3 +1,5 @@
+"""Pydantic models for the semantic graph's building blocks: nodes and edges."""
+
 from pydantic import BaseModel, Field
 from app.enums.node import NodeCategory, EdgeRelation
 

@@ -1,3 +1,9 @@
+"""ClaimGraph API entrypoint.
+
+Creates the FastAPI app, wires up CORS and routers, and registers a global
+handler that renders :class:`app.core.exceptions.AppException` subclasses as
+JSON errors. Run with ``python -m app.main`` to serve on 127.0.0.1:8000.
+"""
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -27,7 +33,7 @@ app.add_middleware(
 
 app.include_router(graphs_router)
 
-# add exception handler here
+# Render any AppException subclass as a JSON error with its status/detail.
 @app.exception_handler(AppException)
 def app_exception_handler(req: Request, exc: AppException):
     return JSONResponse(

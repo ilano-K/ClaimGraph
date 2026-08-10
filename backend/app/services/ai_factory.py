@@ -1,3 +1,8 @@
+"""LLM client factory.
+
+Builds an Instructor-wrapped chat client (supporting structured, schema-typed
+LLM responses) for the provider configured in :mod:`app.core.settings`.
+"""
 from app.core.settings import settings
 from openai import OpenAI
 from google import genai
@@ -5,6 +10,12 @@ from google import genai
 import instructor 
 
 def create_client():
+    """Return an Instructor client for the configured LLM provider.
+
+    ``openai`` uses the OpenAI SDK pointed at ``settings.llm_base_url``;
+    ``gemini`` uses the Google GenAI SDK. Falls through without a client when
+    the provider is unrecognized.
+    """
     provider = settings.llm_provider
     if provider == 'openai':
         return instructor.from_openai(

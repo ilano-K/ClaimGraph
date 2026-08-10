@@ -1,3 +1,10 @@
+"""Core graph compilation pipeline.
+
+Turns one or more source files into a verified semantic graph: parses each
+file to Markdown, asks the LLM for a structured graph, drops any nodes whose
+quotes are not verbatim in their source document, and converts the result
+into React Flow-ready payloads.
+"""
 from app.services.ai_factory import create_client
 from app.core.settings import settings
 from app.schemas.graph import GraphPayload
@@ -13,6 +20,14 @@ from typing import List
 import json
 
 def process_compile_graph(file_paths: List[str]):
+    """Compile a full graph from the given file paths.
+
+    Each file is parsed to Markdown and tagged with an index-based
+    ``document_id`` ("0", "1", ...). Nodes are validated per document so a
+    quote is only accepted if it appears verbatim in *its own* document.
+    Raises :class:`GraphCompilationError` for pipeline failures and
+    :class:`InvalidLLMResponseError` when the LLM omits an input document.
+    """
     if not file_paths:
         raise GraphCompilationError()
     try:
@@ -28,7 +43,8 @@ def process_compile_graph(file_paths: List[str]):
         # get list of invalid node ids
         invalid_node_ids = set()
         
-        
+        # Validate quotes per document: a node is only checked against the
+        # markdown of the document it claims to come from.
         for document in documents:
             document_id = document["document_id"]
             document_markdown = document["content"]
@@ -47,7 +63,7 @@ def process_compile_graph(file_paths: List[str]):
             invalid_node_ids.update(node.id for node in invalid_nodes)
             
 
-        
+        # Drop invalid nodes and any edge touching them, then rebuild.
         valid_nodes = [
             n for n in claim_graph.nodes if n.id not in invalid_node_ids
         ]
@@ -55,7 +71,6 @@ def process_compile_graph(file_paths: List[str]):
             e for e in claim_graph.edges 
             if e.source not in invalid_node_ids and e.target not in invalid_node_ids
         ]
-        
         
         # keep only valid nodes and edges
         claim_graph.nodes = valid_nodes
@@ -72,6 +87,7 @@ def process_compile_graph(file_paths: List[str]):
             react_flow_edges=react_flow_edges,
         )
     except InvalidLLMResponseError:
+        # Surface LLM-specific failures as-is so clients get a precise message.
         raise 
     except Exception:
         raise GraphCompilationError()
@@ -79,6 +95,7 @@ def process_compile_graph(file_paths: List[str]):
 
 
 def to_react_flow_nodes(nodes: List[GraphNode]) -> List[ReactFlowNode]:
+    """Wrap semantic nodes in React Flow-ready nodes at the default origin."""
     return [
         ReactFlowNode(
             id=node.id,
@@ -90,6 +107,7 @@ def to_react_flow_nodes(nodes: List[GraphNode]) -> List[ReactFlowNode]:
     ]
 
 
+# Visual styling + animation per edge relation type (shown on the canvas).
 EDGE_STYLE = {
     EdgeRelation.LIMITS: ReactFlowStyle(stroke="#DC2626", strokeWidth=2),
     EdgeRelation.SUPPORTS: ReactFlowStyle(stroke="#16A34A", strokeWidth=2),
@@ -104,6 +122,7 @@ EDGE_ANIMATED = {
 
 
 def to_react_flow_edges(edges: List[GraphEdge]) -> List[ReactFlowEdge]:
+    """Convert semantic edges into React Flow edges with relation-based styling."""
     return [
         ReactFlowEdge(
             id=edge.id,
@@ -117,6 +136,13 @@ def to_react_flow_edges(edges: List[GraphEdge]) -> List[ReactFlowEdge]:
     ]
     
 def generate_claim_graph(documents) -> GraphPayload:
+    """Request a structured graph from the LLM for the parsed ``documents``.
+
+    ``documents`` is a list of ``{"document_id", "content"}`` dicts serialized
+    as JSON in the user message. After the call, every input ``document_id``
+    must appear among the returned nodes' ``document_id`` fields; otherwise the
+    response cannot be quote-validated and ``InvalidLLMResponseError`` is raised.
+    """
     client = create_client()
     
     result = client.chat.completions.create(
@@ -144,7 +170,9 @@ def generate_claim_graph(documents) -> GraphPayload:
         for node in result.nodes
     }
     
-    invalid_document_ids = (returned_document_ids - input_document_ids)
+    # Any input document with no node attributed to it means the LLM dropped
+    # or renamed an id; fail loudly rather than silently skipping validation.
+    invalid_document_ids = (input_document_ids - returned_document_ids)
     
     if invalid_document_ids:
         raise InvalidLLMResponseError()
