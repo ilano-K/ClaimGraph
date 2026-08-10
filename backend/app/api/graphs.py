@@ -9,3 +9,4 @@ router = APIRouter(prefix="/graphs")
 def compile_graph(payload: CompileGraphRequest):
     """Compile one or more source files into a verified semantic graph."""
     return process_compile_graph(payload.file_paths)
+

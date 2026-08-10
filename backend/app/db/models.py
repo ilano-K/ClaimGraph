@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from app.db.database import Base
 from sqlalchemy import (
     String, Enum,
-    DateTime, ForeignKey, JSON,
+    DateTime, JSON,
     Integer
 )
 
@@ -57,7 +57,7 @@ class Document(Base):
 
     __tablename__ = "documents"
     id: Mapped[str]= mapped_column(String, primary_key=True)
-    workspace: Mapped["Workspace"] = relationship(back_populates="documents")
+    workspace_id: Mapped["Workspace"] = relationship(back_populates="documents")
     filename = mapped_column(String, nullable=False),
     claim_count: Mapped[int] = mapped_column(Integer, default=0)
     evidence_count: Mapped[int] = mapped_column(Integer, default=0)
