@@ -1,31 +1,40 @@
-from sqlalchemy.orm import Session
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 from app.db.models import Workspace
 
-def create_workspace(db: Session, *, name: str, description: str) -> Workspace:
+def create_workspace(
+    db: Session,
+    *,
+    name: str,
+    description: str,
+) -> Workspace:
     workspace = Workspace(
         name=name,
-        description=description
+        description=description,
     )
-    
+
     db.add(workspace)
-    db.commit()
-    db.refresh(workspace)
 
     return workspace
 
-def get_workspace(db: Session, id: str) -> Workspace | None:
+def get_workspace(
+    db: Session,
+    id: str,
+) -> Workspace | None:
     stmt = select(Workspace).where(Workspace.id == id)
 
     return db.scalar(stmt)
 
-def update_workspace(db: Session, workspace: Workspace) -> Workspace:
-    db.commit()
-    db.refresh(workspace)
+def update_workspace(
+    db: Session,
+    workspace: Workspace,
+) -> Workspace:
+    db.add(workspace)
 
     return workspace
 
-def delete_workspace(db: Session, document) -> None:
-    db.commit()
-    db.refresh(document)
-
+def delete_workspace(
+    db: Session,
+    workspace: Workspace,
+) -> None:
+    db.delete(workspace)

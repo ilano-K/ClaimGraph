@@ -6,11 +6,16 @@ from app.core.exceptions import WorkspaceCreationError, WorkspaceNotFoundError, 
 
 def create_workspace(db: Session, request: WorkspaceCreateRequest) -> Workspace:
     try:
-        return workspace_crud.create_workspace(
+        workspace = workspace_crud.create_workspace(
             db, name=request.name, 
             description=request.description
         )
+        
+        db.commit()
+        db.refresh(workspace)
+        return workspace
     except:
+        db.rollback()
         raise WorkspaceCreationError()
 
 def update_workspace(db: Session, workspace_id: str, request: WorkspaceUpdateRequest) -> Workspace:
@@ -18,8 +23,14 @@ def update_workspace(db: Session, workspace_id: str, request: WorkspaceUpdateReq
     
     if workspace is None:
         raise WorkspaceNotFoundError()
-    
+
     try:
-        return workspace_crud.update_workspace(db, workspace=workspace)
+        workspace.name = request.name
+
+        db.commit()
+        db.refresh(workspace)
+        return workspace
+
     except:
+        db.rollback()
         raise WorkspaceUpdateError()

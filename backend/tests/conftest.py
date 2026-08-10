@@ -7,17 +7,25 @@ builds minimal fake PDFs whose sentences are preserved verbatim by Docling,
 which the graph-compile tests rely on for quote validation.
 """
 import os
+import sys
+import tempfile
 from pathlib import Path
+
+# Put the repo root on sys.path so both `app.*` and `backend.app.*` imports
+# resolve regardless of the directory pytest is invoked from.
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+# Route app data (the SQLite database) to a throwaway temp directory so the
+# test session never touches the developer's real %LOCALAPPDATA%\claim-graph\app.db.
+os.environ["LOCALAPPDATA"] = tempfile.mkdtemp(prefix="claimgraph-test-")
 
 # Must be set before any `app.*` import so app.core.settings is satisfied
 # without the real .env key (os.environ has higher precedence than .env).
 os.environ["LLM_PROVIDER"] = "openai"
 os.environ["LLM_API_KEY"] = "test-key"
-os.environ["LLM_MODEL"] = "test-model"
-
-# Stray harness env var (LLM_MODEL_NAME) fractures pydantic-settings, which
-# forbids unknown env inputs. Remove it so app.core.settings imports cleanly.
-os.environ.pop("LLM_MODEL_NAME", None)
+os.environ["LLM_MODEL_NAME"] = "test-model"
 
 import torch
 

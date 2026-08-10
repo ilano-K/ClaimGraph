@@ -8,7 +8,7 @@ from app.db.database import Base
 from sqlalchemy import (
     String, Enum,
     DateTime, JSON,
-    Integer
+    Integer, ForeignKey
 )
 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -57,9 +57,12 @@ class Document(Base):
     """A source file uploaded to a workspace, with extracted-node counts."""
 
     __tablename__ = "documents"
-    id: Mapped[str]= mapped_column(String, primary_key=True)
-    workspace_id: Mapped["Workspace"] = relationship(back_populates="documents")
-    filename = mapped_column(String, nullable=False),
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        String, ForeignKey("workspaces.id"), nullable=False
+    )
+    workspace: Mapped["Workspace"] = relationship(back_populates="documents")
+    filename: Mapped[str] = mapped_column(String, nullable=False)
     claim_count: Mapped[int] = mapped_column(Integer, default=0)
     evidence_count: Mapped[int] = mapped_column(Integer, default=0)
     tradeoff_count: Mapped[int] = mapped_column(Integer, default=0)

@@ -136,3 +136,122 @@ def make_multi_doc_payload_with_invalid_quote() -> GraphPayload:
             ),
         ],
     )
+
+
+def build_document_analysis(document_id: str, index: int) -> DocumentAnalysis:
+    """DocumentAnalysis whose metadata.id matches the real (UUID) document id."""
+    return DocumentAnalysis(
+        metadata=DocumentMetadata(
+            id=document_id,
+            title="Fake Paper" if index == 0 else "Fake Paper 2",
+            author=["Jane Doe"],
+        ),
+        executive_summary=SUMMARY if index == 0 else SECOND_SUMMARY,
+    )
+
+
+def build_single_doc_payload(document_id: str, *, invalid: bool = False) -> GraphPayload:
+    """Payload keyed to the UUID the pipeline actually assigns, for one document."""
+    if invalid:
+        return GraphPayload(
+            documents=[build_document_analysis(document_id, 0)],
+            nodes=[
+                _node("claim-1", CLAIM_QUOTE, NodeCategory.CLAIM, document_id=document_id),
+                _node("evidence-bad", NON_VERBATIM_QUOTE, NodeCategory.EVIDENCE, document_id=document_id),
+            ],
+            edges=[
+                GraphEdge(
+                    id="e-bad",
+                    source="evidence-bad",
+                    target="claim-1",
+                    relation=EdgeRelation.SUPPORTS,
+                    reasoning="Would back the claim, but the quote is fabricated.",
+                )
+            ],
+        )
+
+    return GraphPayload(
+        documents=[build_document_analysis(document_id, 0)],
+        nodes=[
+            _node("claim-1", CLAIM_QUOTE, NodeCategory.CLAIM, document_id=document_id),
+            _node("evidence-1", EVIDENCE_QUOTE, NodeCategory.EVIDENCE, document_id=document_id),
+            _node("tradeoff-1", TRADEOFF_QUOTE, NodeCategory.TRADEOFF, document_id=document_id),
+        ],
+        edges=[
+            GraphEdge(
+                id="e1",
+                source="evidence-1",
+                target="claim-1",
+                relation=EdgeRelation.SUPPORTS,
+                reasoning="Evidence backs the claim.",
+            ),
+            GraphEdge(
+                id="e2",
+                source="tradeoff-1",
+                target="claim-1",
+                relation=EdgeRelation.LIMITS,
+                reasoning="The tradeoff constrains the claim.",
+            ),
+        ],
+    )
+
+
+def build_multi_doc_payload(document_ids: list[str], *, invalid: bool = False) -> GraphPayload:
+    """Payload keyed to the real UUID document ids, for two documents."""
+    doc_0, doc_1 = document_ids
+    if invalid:
+        return GraphPayload(
+            documents=[
+                build_document_analysis(doc_0, 0),
+                build_document_analysis(doc_1, 1),
+            ],
+            nodes=[
+                _node("claim-1", CLAIM_QUOTE, NodeCategory.CLAIM, document_id=doc_0),
+                _node("claim-2", SECOND_DOC_CLAIM_QUOTE, NodeCategory.CLAIM, document_id=doc_1),
+                _node("evidence-bad", NON_VERBATIM_QUOTE, NodeCategory.EVIDENCE, document_id=doc_1),
+            ],
+            edges=[
+                GraphEdge(
+                    id="e2",
+                    source="claim-1",
+                    target="claim-2",
+                    relation=EdgeRelation.DEPENDS_ON,
+                    reasoning="The first claim scaffolds the second.",
+                ),
+                GraphEdge(
+                    id="e-bad",
+                    source="evidence-bad",
+                    target="claim-2",
+                    relation=EdgeRelation.SUPPORTS,
+                    reasoning="Would back the claim, but the quote is fabricated.",
+                ),
+            ],
+        )
+
+    return GraphPayload(
+        documents=[
+            build_document_analysis(doc_0, 0),
+            build_document_analysis(doc_1, 1),
+        ],
+        nodes=[
+            _node("claim-1", CLAIM_QUOTE, NodeCategory.CLAIM, document_id=doc_0),
+            _node("claim-2", SECOND_DOC_CLAIM_QUOTE, NodeCategory.CLAIM, document_id=doc_1),
+            _node("tradeoff-2", SECOND_DOC_TRADEOFF_QUOTE, NodeCategory.TRADEOFF, document_id=doc_1),
+        ],
+        edges=[
+            GraphEdge(
+                id="e2",
+                source="claim-1",
+                target="claim-2",
+                relation=EdgeRelation.DEPENDS_ON,
+                reasoning="The first claim scaffolds the second.",
+            ),
+            GraphEdge(
+                id="e3",
+                source="tradeoff-2",
+                target="claim-2",
+                relation=EdgeRelation.LIMITS,
+                reasoning="The tradeoff constrains the second claim.",
+            ),
+        ],
+    )

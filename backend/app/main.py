@@ -10,6 +10,9 @@ from fastapi.responses import JSONResponse
 from app.api.graphs import router as graphs_router
 from backend.app.api.workspaces import router as workspaces_router
 from app.core.exceptions import AppException
+from contextlib import asynccontextmanager
+from app.db.database import Base, engine
+from app.db import models  # noqa: F401  (register tables on the metadata)
 import logging 
 import uvicorn
 
@@ -22,7 +25,13 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 logger.info("Backend starting...")
 
-app = FastAPI(title="ClaimGraph")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Ensure all tables exist before serving traffic."""
+    Base.metadata.create_all(bind=engine)
+    yield
+
+app = FastAPI(title="ClaimGraph", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
