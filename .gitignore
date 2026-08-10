@@ -13,6 +13,10 @@ requirements.txt
 __pycache__/
 *.pyc
 
+# tests
+/tests/
+backend/tests/
+
 
 
 # skiils related 
