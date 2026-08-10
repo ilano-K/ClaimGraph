@@ -51,10 +51,11 @@ class ReactFlowEdge(BaseModel):
     )
 
 class CompileGraphRequest(BaseModel):
-    """Body of ``POST /graphs/compile``; accepts one or more file paths."""
+    """Body of ``POST /graphs/compile``; accepts one or more file paths and the associated workspace id."""
 
+    workspace_id: str
     file_paths: List[str] = Field(default_factory=list, description="Accept multiple files")
-
+    
 class CompileGraphResponse(BaseModel):
     """
     The final HTTP Response schema returned by POST /api/compile-text and /api/compile-pdf.
