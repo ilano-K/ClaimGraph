@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import OnboardingHeader from './OnboardingHeader.jsx'
 import WelcomeStep from './WelcomeStep.jsx'
+import CreateWorkspaceStep from './CreateWorkspaceStep.jsx'
 import UploadStep from './UploadStep.jsx'
 import ProcessingStep from './ProcessingStep.jsx'
 import ReadyStep from './ReadyStep.jsx'
@@ -8,21 +9,25 @@ import { clamp, fileExtension, formatBytes } from '../../lib/utils.js'
 
 const STEP_NUMBER = {
   welcome: 1,
-  upload: 2,
-  processing: 3,
-  ready: 4,
+  workspace: 2,
+  upload: 3,
+  processing: 4,
+  ready: 5,
 }
 
 /**
- * Orchestrates the fake onboarding flow (welcome -> upload -> processing ->
- * ready). Step 2 is a real file picker (PDF/DOCX); the files the user selects
- * become the documents simulated through the Processing and Ready steps.
+ * Orchestrates the fake onboarding flow (welcome -> create workspace ->
+ * upload -> processing -> ready). Step 3 is a real file picker (PDF/DOCX);
+ * the files the user selects become the documents simulated through the
+ * Processing and Ready steps.
  */
 export default function OnboardingFlow({ onOpenWorkspace, onSkip }) {
   const [step, setStep] = useState('welcome')
   const [files, setFiles] = useState([])
   const [documents, setDocuments] = useState([])
   const [uploadError, setUploadError] = useState(null)
+  const [workspaceName, setWorkspaceName] = useState('')
+  const [workspaceDescription, setWorkspaceDescription] = useState('')
   const fileIdRef = useRef(0)
 
   useEffect(() => {
@@ -99,15 +104,26 @@ export default function OnboardingFlow({ onOpenWorkspace, onSkip }) {
     setStep('processing')
   }
 
-  const handleContinueUpload = () => setStep('upload')
-  const handleContinueWorkspace = () => setStep('ready')
+  const handleContinueReady = () => setStep('ready')
 
   return (
     <div className="text-on-background font-body-md bg-background min-h-screen flex flex-col overflow-x-hidden antialiased">
-      <OnboardingHeader activeStep={STEP_NUMBER[step]} />
+      <OnboardingHeader activeStep={STEP_NUMBER[step]} totalSteps={5} />
 
       {step === 'welcome' && (
-        <WelcomeStep onContinue={handleContinueUpload} onSkip={onSkip} />
+        <WelcomeStep onContinue={() => setStep('workspace')} onSkip={onSkip} />
+      )}
+
+      {step === 'workspace' && (
+        <CreateWorkspaceStep
+          name={workspaceName}
+          onNameChange={setWorkspaceName}
+          description={workspaceDescription}
+          onDescriptionChange={setWorkspaceDescription}
+          onSubmit={() => setStep('upload')}
+          onBack={() => setStep('welcome')}
+          onSkip={onSkip}
+        />
       )}
 
       {step === 'upload' && (
@@ -117,7 +133,7 @@ export default function OnboardingFlow({ onOpenWorkspace, onSkip }) {
           onAdd={handleAddFiles}
           onRemove={handleRemoveFile}
           onProcess={handleProcessUpload}
-          onBack={() => setStep('welcome')}
+          onBack={() => setStep('workspace')}
           onSkip={onSkip}
         />
       )}
@@ -126,13 +142,14 @@ export default function OnboardingFlow({ onOpenWorkspace, onSkip }) {
         <ProcessingStep
           documents={documents}
           overallProgress={overallProgress}
-          onContinue={handleContinueWorkspace}
+          onContinue={handleContinueReady}
         />
       )}
 
       {step === 'ready' && (
         <ReadyStep
           documents={documents}
+          workspaceName={workspaceName}
           onOpenWorkspace={onOpenWorkspace}
           onAddDocuments={() => setStep('upload')}
         />

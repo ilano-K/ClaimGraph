@@ -30,7 +30,7 @@ export default function WelcomeStep({ onContinue, onSkip }) {
             onClick={onContinue}
             className="w-full bg-primary-container text-on-primary-container font-label-md text-label-md py-4 rounded-lg kinetic-glow active:scale-95 transition-all"
           >
-            Continue to Upload
+            Create a Workspace
           </button>
           <button
             type="button"

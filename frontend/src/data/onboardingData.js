@@ -5,9 +5,10 @@
 
 export const ONBOARDING_STEPS = [
   { number: 1, label: 'Welcome' },
-  { number: 2, label: 'Upload' },
-  { number: 3, label: 'Processing' },
-  { number: 4, label: 'Ready' },
+  { number: 2, label: 'Create Workspace' },
+  { number: 3, label: 'Upload' },
+  { number: 4, label: 'Processing' },
+  { number: 5, label: 'Ready' },
 ]
 
 export const welcomeFeatures = [
