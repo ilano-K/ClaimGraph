@@ -1,5 +1,5 @@
 from app.core.exceptions import InvalidLLMResponseError
-from app.services import extractor
+from backend.app.services import graph_service
 from tests.helpers import (
     SECOND_SUMMARY,
     SUMMARY,
@@ -15,7 +15,7 @@ def _raise_invalid_llm(documents):
 
 
 def test_compile_graph_happy_path(client, fake_pdf, monkeypatch):
-    monkeypatch.setattr(extractor, "generate_claim_graph", lambda documents: make_fake_payload())
+    monkeypatch.setattr(graph_service, "generate_claim_graph", lambda documents: make_fake_payload())
 
     resp = client.post("/graphs/compile", json={"file_paths": [str(fake_pdf)]})
 
@@ -35,7 +35,7 @@ def test_compile_graph_happy_path(client, fake_pdf, monkeypatch):
 
 
 def test_compile_graph_multiple_files(client, fake_pdf, fake_pdf_2, monkeypatch):
-    monkeypatch.setattr(extractor, "generate_claim_graph", lambda documents: make_multi_doc_payload())
+    monkeypatch.setattr(graph_service, "generate_claim_graph", lambda documents: make_multi_doc_payload())
 
     resp = client.post(
         "/graphs/compile",
@@ -57,7 +57,7 @@ def test_compile_graph_multiple_files(client, fake_pdf, fake_pdf_2, monkeypatch)
 
 def test_compile_graph_filters_invalid_quote_nodes(client, fake_pdf, monkeypatch):
     monkeypatch.setattr(
-        extractor,
+        graph_service,
         "generate_claim_graph",
         lambda documents: make_fake_payload_with_invalid_quote(),
     )
@@ -75,7 +75,7 @@ def test_compile_graph_filters_invalid_quote_nodes(client, fake_pdf, monkeypatch
 
 def test_compile_graph_filters_invalid_quotes_per_document(client, fake_pdf, fake_pdf_2, monkeypatch):
     monkeypatch.setattr(
-        extractor,
+        graph_service,
         "generate_claim_graph",
         lambda documents: make_multi_doc_payload_with_invalid_quote(),
     )
@@ -110,7 +110,7 @@ def test_compile_graph_empty_file_list_returns_500(client):
 
 
 def test_compile_graph_surfaces_invalid_llm_response(client, fake_pdf, monkeypatch):
-    monkeypatch.setattr(extractor, "generate_claim_graph", _raise_invalid_llm)
+    monkeypatch.setattr(graph_service, "generate_claim_graph", _raise_invalid_llm)
 
     resp = client.post("/graphs/compile", json={"file_paths": [str(fake_pdf)]})
 

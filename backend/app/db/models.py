@@ -14,14 +14,15 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.enums.workspace import IngressMode, WorkspaceStatus
 from typing import Optional, Dict, Any, List
+import uuid
 
 class Workspace(Base):
     """A single workspace; populates the dashboard cards and holds documents."""
 
     __tablename__ = "workspaces"
-    id: Mapped[str] = mapped_column(String, primary_key=True)
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     name: Mapped[str] = mapped_column(String, nullable=False)
-    
+    description: Mapped[str] = mapped_column(String)
     ingress_mode: Mapped[IngressMode] = mapped_column(
         Enum(IngressMode), 
         default=IngressMode.HTTP, 

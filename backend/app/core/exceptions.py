@@ -22,3 +22,20 @@ class InvalidLLMResponseError(AppException):
 
     status_code: int = 500
     detail: str = "LLM returned an invalid OUTPUT"
+    
+class WorkspaceCreationError(AppException):
+    """Raised when workspace creation fails."""
+    
+    status_code: int = 505
+    detail: str = "Workspace creation failed."
+
+class WorkspaceUpdateError(AppException):
+    """Raised when updating of workspace fails"""
+    
+    status_code: int = 505
+    detail: str = "Workspace update failed."
+class WorkspaceNotFoundError(AppException):
+    """Raised when the requested workspace does not exist."""
+    
+    status_code: int = 404
+    detail: str = "Workspace not found"

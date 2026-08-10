@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from app.api.graphs import router as graphs_router
+from backend.app.api.workspaces import router as workspaces_router
 from app.core.exceptions import AppException
 import logging 
 import uvicorn
@@ -32,6 +33,7 @@ app.add_middleware(
 )
 
 app.include_router(graphs_router)
+app.include_router(workspaces_router)
 
 # Render any AppException subclass as a JSON error with its status/detail.
 @app.exception_handler(AppException)

@@ -5,8 +5,8 @@ import pytest
 from app.core.exceptions import InvalidLLMResponseError
 from app.enums.node import EdgeRelation, NodeCategory
 from app.schemas.node import GraphEdge, GraphNode
-from app.services import extractor
-from app.services.extractor import generate_claim_graph, to_react_flow_edges, to_react_flow_nodes
+from backend.app.services import graph_service
+from backend.app.services.graph_service import generate_claim_graph, to_react_flow_edges, to_react_flow_nodes
 from app.services.verify_quotes import find_nodes_with_invalid_quotes
 
 from tests.helpers import make_multi_doc_payload
@@ -34,7 +34,7 @@ class _FakeClient:
 
 def _stub_client(monkeypatch, payload):
     client = _FakeClient(payload)
-    monkeypatch.setattr(extractor, "create_client", lambda: client)
+    monkeypatch.setattr(graph_service, "create_client", lambda: client)
     return client
 
 
