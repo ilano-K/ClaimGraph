@@ -5,3 +5,7 @@ class AppException(Exception):
 class GraphCompilationError(AppException):
     status_code: int = 500 
     detail: str = "Graph Compile Error"
+    
+class InvalidLLMResponseError(AppException):
+    status_code: int = 500
+    detail: str = "LLM returned an invalid OUTPUT"

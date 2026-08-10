@@ -7,6 +7,7 @@ Represents a single extracted idea or statement from the document.
 """
 class GraphNode(BaseModel):
     id: str
+    document_id: str
     node_category: NodeCategory = Field(description="The classification category of the node")
     title: str = Field(description="A concise 3-to-7 word title for the card reader")
     summary: str = Field(description="A 1-to-2 sentence plain-English explaination of the point")

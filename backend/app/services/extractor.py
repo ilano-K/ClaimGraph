@@ -8,19 +8,46 @@ from app.schemas.api import CompileGraphResponse
 from app.services.verify_quotes import find_nodes_with_invalid_quotes
 from app.schemas.api import ReactFlowNode, ReactFlowEdge, ReactFlowStyle
 from app.enums.node import EdgeRelation
-from app.core.exceptions import GraphCompilationError
+from app.core.exceptions import GraphCompilationError, InvalidLLMResponseError
 from typing import List
+import json
 
-def process_compile_graph(file_path: str):
+def process_compile_graph(file_paths: List[str]):
+    if not file_paths:
+        raise GraphCompilationError()
     try:
-        document_markdown = parse_document_to_markdown(file_path)
-            
-        claim_graph = generate_claim_graph(document_markdown)
+        documents = []
+        for index, file_path in enumerate(file_paths):
+            documents.append({
+                "document_id": str(index),
+                "content": parse_document_to_markdown(file_path)
+            })
+        
+        claim_graph = generate_claim_graph(documents)
         
         # get list of invalid node ids
-        invalid_node_ids = {
-            node.id for node in find_nodes_with_invalid_quotes(document_markdown, claim_graph.nodes)
-        }
+        invalid_node_ids = set()
+        
+        
+        for document in documents:
+            document_id = document["document_id"]
+            document_markdown = document["content"]
+            
+            document_nodes = [
+                node 
+                for node in claim_graph.nodes
+                if node.document_id == document_id
+            ]
+            
+            invalid_nodes = find_nodes_with_invalid_quotes(
+                document_markdown, 
+                document_nodes
+            )
+            
+            invalid_node_ids.update(node.id for node in invalid_nodes)
+            
+
+        
         valid_nodes = [
             n for n in claim_graph.nodes if n.id not in invalid_node_ids
         ]
@@ -39,14 +66,16 @@ def process_compile_graph(file_path: str):
     
         return CompileGraphResponse(
             success=True,
-            summary=claim_graph.executive_summary,
-            metadata=claim_graph.metadata,
+            documents=claim_graph.documents,
             graph=claim_graph,
             react_flow_nodes=react_flow_nodes,
             react_flow_edges=react_flow_edges,
         )
-    except:
+    except InvalidLLMResponseError:
+        raise 
+    except Exception:
         raise GraphCompilationError()
+
 
 
 def to_react_flow_nodes(nodes: List[GraphNode]) -> List[ReactFlowNode]:
@@ -87,7 +116,7 @@ def to_react_flow_edges(edges: List[GraphEdge]) -> List[ReactFlowEdge]:
         for edge in edges
     ]
     
-def generate_claim_graph(document):
+def generate_claim_graph(documents) -> GraphPayload:
     client = create_client()
     
     result = client.chat.completions.create(
@@ -100,10 +129,24 @@ def generate_claim_graph(document):
         },
         {
             "role": "user",
-            "content": document,
+            "content": json.dumps(documents, ensure_ascii=False),
         },
     ],
     ) 
     
+    input_document_ids = {
+        document["document_id"]
+        for document in documents 
+    }
+    
+    returned_document_ids = {
+        node.document_id 
+        for node in result.nodes
+    }
+    
+    invalid_document_ids = (returned_document_ids - input_document_ids)
+    
+    if invalid_document_ids:
+        raise InvalidLLMResponseError()
     
     return result

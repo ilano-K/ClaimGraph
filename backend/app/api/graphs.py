@@ -5,4 +5,4 @@ router = APIRouter(prefix="/graphs")
 
 @router.post('/compile', response_model=CompileGraphResponse)
 def compile_graph(payload: CompileGraphRequest):
-    return process_compile_graph(payload.file_path)
+    return process_compile_graph(payload.file_paths)

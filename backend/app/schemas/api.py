@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field 
 from app.schemas.node import GraphNode
-from app.schemas.graph import DocumentMetadata, GraphPayload
+from app.schemas.graph import DocumentMetadata, GraphPayload, DocumentAnalysis
 from app.enums.node import EdgeRelation
 from typing import Dict, List
 
@@ -49,7 +49,7 @@ class ReactFlowEdge(BaseModel):
     )
 
 class CompileGraphRequest(BaseModel):
-    file_path: str
+    file_paths: List[str] = Field(default_factory=list, description="Accept multiple files")
 
 class CompileGraphResponse(BaseModel):
     """
@@ -57,8 +57,10 @@ class CompileGraphResponse(BaseModel):
     """
     success: bool = Field(default=True)
     message: str = Field(default="Graph compilation successful.")
-    summary: str = Field(..., description="Executive summary of the document.")
-    metadata: DocumentMetadata
+    documents: List[DocumentAnalysis]  = Field(
+        ...,
+        description="Analysis and metadata for each source document."
+    )
     graph: GraphPayload = Field(
         ..., 
         description="The pure semantic graph payload."
