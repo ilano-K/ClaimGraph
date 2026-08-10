@@ -29,10 +29,16 @@ FAKE_PDF_LINES = [
     "Our evaluation also examines throughput at small batch sizes.",
 ]
 
+FAKE_PDF_LINES_2 = [
+    "Approximate attention accelerates long-context inference.",
+    "Low-rank pruning slashes parameter count without retraining.",
+    "Drastic compression remains brittle against noisy inputs.",
+]
 
-def build_fake_pdf() -> bytes:
+
+def build_fake_pdf(lines) -> bytes:
     parts = [b"BT", b"/F1 11 Tf", b"72 700 Td"]
-    for line in FAKE_PDF_LINES:
+    for line in lines:
         parts.append(b"(" + line.encode() + b") Tj")
         parts.append(b"0 -24 Td")
     parts.append(b"ET")
@@ -70,7 +76,16 @@ def fake_pdf():
     FIXTURES_DIR.mkdir(parents=True, exist_ok=True)
     path = FIXTURES_DIR / "fake_paper.pdf"
     if not path.exists():
-        path.write_bytes(build_fake_pdf())
+        path.write_bytes(build_fake_pdf(FAKE_PDF_LINES))
+    return path
+
+
+@pytest.fixture(scope="session")
+def fake_pdf_2():
+    FIXTURES_DIR.mkdir(parents=True, exist_ok=True)
+    path = FIXTURES_DIR / "fake_paper_2.pdf"
+    if not path.exists():
+        path.write_bytes(build_fake_pdf(FAKE_PDF_LINES_2))
     return path
 
 

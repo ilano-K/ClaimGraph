@@ -1,5 +1,5 @@
 from app.enums.node import EdgeRelation, NodeCategory
-from app.schemas.graph import DocumentMetadata, GraphPayload
+from app.schemas.graph import DocumentAnalysis, DocumentMetadata, GraphPayload
 from app.schemas.node import GraphEdge, GraphNode
 
 CLAIM_QUOTE = "Hypergraph attention reduces computational requirements."
@@ -7,12 +7,17 @@ EVIDENCE_QUOTE = "Sparse quantization preserves latency on consumer hardware."
 TRADEOFF_QUOTE = "Mixed precision training is a tradeoff of speed and accuracy."
 NON_VERBATIM_QUOTE = "This sentence does not appear anywhere in the fake paper."
 
+SECOND_DOC_CLAIM_QUOTE = "Approximate attention accelerates long-context inference."
+SECOND_DOC_TRADEOFF_QUOTE = "Drastic compression remains brittle against noisy inputs."
+
 SUMMARY = "A fake paper shows hypergraph attention reduces costs, backed by quantization evidence, yet tradeoffs remain."
+SECOND_SUMMARY = "A second fake paper accelerates inference with approximate attention, yet compression remains brittle."
 
 
-def _node(node_id, quote, category):
+def _node(node_id, quote, category, document_id="0"):
     return GraphNode(
         id=node_id,
+        document_id=document_id,
         node_category=category,
         title="Fake-node title",
         summary="A fake single-sentence point.",
@@ -20,14 +25,20 @@ def _node(node_id, quote, category):
     )
 
 
+def _document(metadata_id, title, executive_summary):
+    return DocumentAnalysis(
+        metadata=DocumentMetadata(id=metadata_id, title=title, author=["Jane Doe"]),
+        executive_summary=executive_summary,
+    )
+
+
 def make_fake_payload() -> GraphPayload:
     return GraphPayload(
-        metadata=DocumentMetadata(title="Fake Paper", author=["Jane Doe"]),
-        executive_summary=SUMMARY,
+        documents=[_document("0", "Fake Paper", SUMMARY)],
         nodes=[
-            _node("claim-1", CLAIM_QUOTE, NodeCategory.CLAIM),
-            _node("evidence-1", EVIDENCE_QUOTE, NodeCategory.EVIDENCE),
-            _node("tradeoff-1", TRADEOFF_QUOTE, NodeCategory.TRADEOFF),
+            _node("claim-1", CLAIM_QUOTE, NodeCategory.CLAIM, document_id="0"),
+            _node("evidence-1", EVIDENCE_QUOTE, NodeCategory.EVIDENCE, document_id="0"),
+            _node("tradeoff-1", TRADEOFF_QUOTE, NodeCategory.TRADEOFF, document_id="0"),
         ],
         edges=[
             GraphEdge(
@@ -48,13 +59,12 @@ def make_fake_payload() -> GraphPayload:
     )
 
 
-def make_payload_with_invalid_quote() -> GraphPayload:
+def make_fake_payload_with_invalid_quote() -> GraphPayload:
     return GraphPayload(
-        metadata=DocumentMetadata(title="Fake Paper", author=["Jane Doe"]),
-        executive_summary=SUMMARY,
+        documents=[_document("0", "Fake Paper", SUMMARY)],
         nodes=[
-            _node("claim-1", CLAIM_QUOTE, NodeCategory.CLAIM),
-            _node("evidence-bad", NON_VERBATIM_QUOTE, NodeCategory.EVIDENCE),
+            _node("claim-1", CLAIM_QUOTE, NodeCategory.CLAIM, document_id="0"),
+            _node("evidence-bad", NON_VERBATIM_QUOTE, NodeCategory.EVIDENCE, document_id="0"),
         ],
         edges=[
             GraphEdge(
@@ -64,5 +74,65 @@ def make_payload_with_invalid_quote() -> GraphPayload:
                 relation=EdgeRelation.SUPPORTS,
                 reasoning="Would back the claim, but the quote is fabricated.",
             )
+        ],
+    )
+
+
+def make_multi_doc_payload() -> GraphPayload:
+    return GraphPayload(
+        documents=[
+            _document("0", "Fake Paper", SUMMARY),
+            _document("1", "Fake Paper 2", SECOND_SUMMARY),
+        ],
+        nodes=[
+            _node("claim-1", CLAIM_QUOTE, NodeCategory.CLAIM, document_id="0"),
+            _node("claim-2", SECOND_DOC_CLAIM_QUOTE, NodeCategory.CLAIM, document_id="1"),
+            _node("tradeoff-2", SECOND_DOC_TRADEOFF_QUOTE, NodeCategory.TRADEOFF, document_id="1"),
+        ],
+        edges=[
+            GraphEdge(
+                id="e2",
+                source="claim-1",
+                target="claim-2",
+                relation=EdgeRelation.DEPENDS_ON,
+                reasoning="The first claim scaffolds the second.",
+            ),
+            GraphEdge(
+                id="e3",
+                source="tradeoff-2",
+                target="claim-2",
+                relation=EdgeRelation.LIMITS,
+                reasoning="The tradeoff constrains the second claim.",
+            ),
+        ],
+    )
+
+
+def make_multi_doc_payload_with_invalid_quote() -> GraphPayload:
+    return GraphPayload(
+        documents=[
+            _document("0", "Fake Paper", SUMMARY),
+            _document("1", "Fake Paper 2", SECOND_SUMMARY),
+        ],
+        nodes=[
+            _node("claim-1", CLAIM_QUOTE, NodeCategory.CLAIM, document_id="0"),
+            _node("claim-2", SECOND_DOC_CLAIM_QUOTE, NodeCategory.CLAIM, document_id="1"),
+            _node("evidence-bad", NON_VERBATIM_QUOTE, NodeCategory.EVIDENCE, document_id="1"),
+        ],
+        edges=[
+            GraphEdge(
+                id="e2",
+                source="claim-1",
+                target="claim-2",
+                relation=EdgeRelation.DEPENDS_ON,
+                reasoning="The first claim scaffolds the second.",
+            ),
+            GraphEdge(
+                id="e-bad",
+                source="evidence-bad",
+                target="claim-2",
+                relation=EdgeRelation.SUPPORTS,
+                reasoning="Would back the claim, but the quote is fabricated.",
+            ),
         ],
     )
