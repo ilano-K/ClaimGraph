@@ -7,11 +7,10 @@ JSON errors. Run with ``python -m app.main`` to serve on 127.0.0.1:8000.
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from backend.app.api.workspaces import router as workspaces_router
+from app.api.routes import api_router
 from app.core.exceptions import AppException
 from contextlib import asynccontextmanager
 from app.db.database import Base, engine
-from app.db import models  # noqa: F401  (register tables on the metadata)
 import logging 
 import uvicorn
 
@@ -40,7 +39,7 @@ app.add_middleware(
     allow_headers=["*"], 
 )
 
-app.include_router(workspaces_router)
+app.include_router(api_router)
 
 # Render any AppException subclass as a JSON error with its status/detail.
 @app.exception_handler(AppException)
