@@ -1,10 +1,9 @@
-"""HTTP-layer request/response schemas for the public API."""
+"""React Flow canvas view models: nodes, edges, and styling for the frontend."""
 
 from pydantic import BaseModel, Field 
 from app.schemas.node import GraphNode
-from app.schemas.graph import DocumentMetadata, GraphPayload, DocumentAnalysis
 from app.enums.node import EdgeRelation
-from typing import Dict, List
+from typing import Dict
 
 class ReactFlowStyle(BaseModel):
     """
@@ -48,33 +47,4 @@ class ReactFlowEdge(BaseModel):
     style: ReactFlowStyle = Field(
         ..., 
         description="Color and width styling properties."
-    )
-
-class CompileGraphRequest(BaseModel):
-    """Body of ``POST /graphs/compile``; accepts one or more file paths and the associated workspace id."""
-
-    workspace_id: str
-    file_paths: List[str] = Field(default_factory=list, description="Accept multiple files")
-    
-class CompileGraphResponse(BaseModel):
-    """
-    The final HTTP Response schema returned by POST /api/compile-text and /api/compile-pdf.
-    """
-    success: bool = Field(default=True)
-    message: str = Field(default="Graph compilation successful.")
-    documents: List[DocumentAnalysis]  = Field(
-        ...,
-        description="Analysis and metadata for each source document."
-    )
-    graph: GraphPayload = Field(
-        ..., 
-        description="The pure semantic graph payload."
-    )
-    react_flow_nodes: List[ReactFlowNode] = Field(
-        ..., 
-        description="Pre-formatted node list ready for React Flow's useNodes hook."
-    )
-    react_flow_edges: List[ReactFlowEdge] = Field(
-        ..., 
-        description="Pre-formatted edge list ready for React Flow's useEdges hook."
     )

@@ -12,7 +12,7 @@ from sqlalchemy import (
 )
 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from app.enums.workspace import IngressMode, WorkspaceStatus
+from app.enums.workspace import IngressMode, WorkspaceStatus, DocumentStatus
 from typing import Optional, Dict, Any, List
 import uuid
 
@@ -63,6 +63,8 @@ class Document(Base):
     )
     workspace: Mapped["Workspace"] = relationship(back_populates="documents")
     filename: Mapped[str] = mapped_column(String, nullable=False)
+    file_path: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[DocumentStatus] = mapped_column(Enum(DocumentStatus), default=DocumentStatus.QUEUED)
     claim_count: Mapped[int] = mapped_column(Integer, default=0)
     evidence_count: Mapped[int] = mapped_column(Integer, default=0)
     tradeoff_count: Mapped[int] = mapped_column(Integer, default=0)

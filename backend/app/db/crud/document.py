@@ -1,6 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from app.db.models import Document
+from app.enums.workspace import DocumentStatus
 
 def create_document(
     db: Session,
@@ -8,6 +9,8 @@ def create_document(
     id: str,
     workspace_id: str,
     filename: str,
+    file_path: str, 
+    status: DocumentStatus,
     claim_count: int,
     evidence_count: int,
     tradeoff_count: int,
@@ -16,6 +19,8 @@ def create_document(
         id=id,
         workspace_id=workspace_id,
         filename=filename,
+        file_path=file_path,
+        status=status,
         claim_count=claim_count,
         evidence_count=evidence_count,
         tradeoff_count=tradeoff_count,

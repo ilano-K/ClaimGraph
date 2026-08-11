@@ -22,7 +22,12 @@ class InvalidLLMResponseError(AppException):
 
     status_code: int = 500
     detail: str = "LLM returned an invalid OUTPUT"
+
+class FileNotFoundError(AppException):
+    """Raised when the given file path does not exist"""
     
+    status_code: int = 404 
+    detail: str = "File not found"
 class WorkspaceCreationError(AppException):
     """Raised when workspace creation fails."""
     
@@ -39,3 +44,13 @@ class WorkspaceNotFoundError(AppException):
     
     status_code: int = 404
     detail: str = "Workspace not found"
+
+class WorkspaceCompilationError(AppException):
+    """Raised when the workspace compilation pipeline fails for any reason."""
+    
+    status_code: int = 500 
+    detail: str = "Workspace Compile Error"
+class WorkspaceDocumentNotFoundError(AppException):
+    """Raised when one or more requested documents do not belong to the workspace"""
+    status_code: int = 404
+    detail: str = "One or more documents not found in workspace"
