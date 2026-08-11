@@ -3,9 +3,6 @@
 Converts uploaded source files into Markdown (and optionally semantic chunks)
 via the Docling library. The converter and chunker are module-level singletons
 because model loading is expensive and must happen only once per process.
-OCR is disabled because the layout/OCR stage downloads and loads several heavy
-models (RapidOCR + torch) that routinely exhaust memory on text-heavy inputs;
-text extraction via pdfium does not need them.
 """
 from docling_core.transforms.chunker.hybrid_chunker import HybridChunker
 from docling.document_converter import DocumentConverter, PdfFormatOption
