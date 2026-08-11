@@ -23,3 +23,7 @@ backend/tests/
 /.superpowers
 /.opencode
 /docs/
+
+# scratch / session files
+dashboard.html
+session-*.md
