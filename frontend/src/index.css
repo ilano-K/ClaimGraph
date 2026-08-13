@@ -70,12 +70,16 @@ body {
 .connection-line {
   fill: none;
   stroke-width: 2;
-  transition: filter 0.2s ease-in-out;
+  transition: filter 0.2s ease-in-out, opacity 0.2s ease-in-out;
 }
 
-.connection-line.highlighted {
+.connection-line.emphasized {
   filter: brightness(1.8);
   stroke-width: 3;
+}
+
+.connection-line.dimmed {
+  opacity: 0.08;
 }
 
 /* Edge verb styling. Stroke color is set inline per edge (SUPPORTS inherits
@@ -123,6 +127,14 @@ body {
   font-weight: 500;
   letter-spacing: 0.06em;
   pointer-events: none;
+}
+
+.edge-label.dimmed {
+  opacity: 0.08;
+}
+
+.edge-label {
+  transition: opacity 0.2s ease-in-out;
 }
 
 /* Specific node accent borders */

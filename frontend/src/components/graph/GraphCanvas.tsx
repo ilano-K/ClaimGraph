@@ -344,7 +344,7 @@ export default function GraphCanvas({
           transformOrigin: '0 0',
         }}
       >
-        <ConnectionLines edges={routedEdges} nodes={sizedNodes} highlighted={hoveredNodeId !== null} />
+        <ConnectionLines edges={routedEdges} nodes={sizedNodes} hoveredNodeId={hoveredNodeId} />
         {nodes.map((node) => (
           <NodeCard
             key={node.id}

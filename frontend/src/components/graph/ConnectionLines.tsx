@@ -2,15 +2,23 @@ import { Fragment, memo } from 'react'
 import type { GraphEdgeView, GraphNodeView, EdgeRelation } from '../../api/types'
 import { NODE_ACCENT } from '../../data/mockData'
 
+type EdgeState = 'normal' | 'emphasized' | 'dimmed'
+
+function edgeState(edge: GraphEdgeView, hoveredNodeId: string | null): EdgeState {
+  if (!hoveredNodeId) return 'normal'
+  if (edge.source === hoveredNodeId || edge.target === hoveredNodeId) return 'emphasized'
+  return 'dimmed'
+}
+
 interface EdgeLabelProps {
   edge: GraphEdgeView
-  highlighted: boolean
+  state: EdgeState
 }
 
 interface ConnectionLinesProps {
   edges: GraphEdgeView[]
   nodes: GraphNodeView[]
-  highlighted: boolean
+  hoveredNodeId: string | null
 }
 
 /**
@@ -23,17 +31,19 @@ interface ConnectionLinesProps {
  * - CAUSES:    solid, red/amber tint, thicker stroke.
  * - CHALLENGES: dashed, red tint, thickest stroke.
  *
- * When any node is hovered the full trail brightens. The SVG lives inside the
+ * When a node is hovered, edges touching that node are `emphasized` (brighten +
+ * thicken) while every other edge and its pill are `dimmed` to near-invisible,
+ * so the hovered node's connections stand out. The SVG lives inside the
  * pan/zoom wrapper, so its coordinate system matches the world coordinates
  * used by the node cards.
  */
-function EdgeLabel({ edge, highlighted }: EdgeLabelProps) {
+function EdgeLabel({ edge, state }: EdgeLabelProps) {
   const text = edge.relation.toUpperCase()
   const label = edge.label ?? { x: 0, y: 0 }
   const pillWidth = text.length * 7 + 16
   const pillHeight = 20
   return (
-    <g className={highlighted ? 'edge-label highlighted' : 'edge-label'}>
+    <g className={`edge-label ${state}`}>
       <rect
         x={label.x - pillWidth / 2}
         y={label.y - pillHeight / 2}
@@ -63,7 +73,7 @@ function colorSlug(color: string) {
   return color.replace('#', '')
 }
 
-function ConnectionLines({ edges, nodes, highlighted }: ConnectionLinesProps) {
+function ConnectionLines({ edges, nodes, hoveredNodeId }: ConnectionLinesProps) {
   const toneByNode = new Map<string, keyof typeof NODE_ACCENT>()
   for (const node of nodes) {
     toneByNode.set(node.id, node.presentation.tone)
@@ -79,7 +89,6 @@ function ConnectionLines({ edges, nodes, highlighted }: ConnectionLinesProps) {
   })
 
   const colors = Array.from(new Set(coloredEdges.map((edge) => edge.color)))
-  const highlightSuffix = highlighted ? '-hi' : ''
 
   return (
     <svg
@@ -114,23 +123,26 @@ function ConnectionLines({ edges, nodes, highlighted }: ConnectionLinesProps) {
           </Fragment>
         ))}
       </defs>
-      {coloredEdges.map((edge) => (
-        <path
-          key={edge.id}
-          className={`connection-line edge-${edge.relation}${
-            highlighted ? ' highlighted' : ''
-          }`}
-          style={{ stroke: edge.color }}
-          d={edge.path}
-          markerEnd={`url(#arrow-${colorSlug(edge.color)}${highlightSuffix})`}
-        />
-      ))}
+      {coloredEdges.map((edge) => {
+        const state = edgeState(edge, hoveredNodeId)
+        const markerSuffix = state === 'emphasized' ? '-hi' : ''
+        return (
+          <path
+            key={edge.id}
+            className={`connection-line edge-${edge.relation} ${state}`}
+            style={{ stroke: edge.color }}
+            d={edge.path}
+            markerEnd={`url(#arrow-${colorSlug(edge.color)}${markerSuffix})`}
+          />
+        )
+      })}
       <g className="edge-labels">
-        {coloredEdges.map((edge) =>
-          edge.relation && edge.label ? (
-            <EdgeLabel key={`label-${edge.id}`} edge={edge} highlighted={highlighted} />
+        {coloredEdges.map((edge) => {
+          const state = edgeState(edge, hoveredNodeId)
+          return edge.relation && edge.label ? (
+            <EdgeLabel key={`label-${edge.id}`} edge={edge} state={state} />
           ) : null
-        )}
+        })}
       </g>
     </svg>
   )
