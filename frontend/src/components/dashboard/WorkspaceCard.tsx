@@ -103,6 +103,49 @@ function ProcessingFooter({ status }: { status: Exclude<WorkspaceSummary['status
   )
 }
 
+interface CardMenuProps {
+  status: WorkspaceSummary['status']
+  isRecompiling: boolean
+  onRecompile: () => void
+  onClose: () => void
+}
+
+/**
+ * Dropdown actions for a workspace card's three-dots menu. Always clickable:
+ * `ready` cards offer Recompile, `failed` cards offer Retry Compiling, and
+ * non-actionable states render a disabled status hint.
+ */
+function CardMenu({ status, isRecompiling, onRecompile, onClose }: CardMenuProps) {
+  const actionable = status === 'ready' || status === 'failed'
+  const label =
+    isRecompiling ? 'Recompiling...'
+    : status === 'failed' ? 'Retry Compiling'
+    : status === 'ready' ? 'Recompile'
+    : status === 'compiling' ? 'Compiling...'
+    : 'Awaiting documents'
+
+  return (
+    <div className="absolute right-0 top-8 z-20 glass-panel rounded-lg p-1 flex flex-col w-40">
+      <button
+        type="button"
+        onClick={() => {
+          if (!actionable) return
+          onClose()
+          onRecompile()
+        }}
+        disabled={!actionable || isRecompiling}
+        className="px-3 py-2 text-label-sm flex items-center gap-2 text-on-surface hover:bg-white/10 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        <Icon
+          name="sync"
+          className={isRecompiling || status === 'compiling' ? 'text-[16px] animate-spin' : 'text-[16px]'}
+        />
+        {label}
+      </button>
+    </div>
+  )
+}
+
 interface WorkspaceCardProps {
   workspace: WorkspaceSummary
   onOpen: () => void
@@ -166,30 +209,18 @@ export default function WorkspaceCard({
         <div className="relative" ref={menuRef}>
           <button
             type="button"
-            className={cn(
-              'relative text-on-surface-variant hover:text-primary p-1',
-              !isReady && 'disabled:opacity-50'
-            )}
-            disabled={!isReady}
-            onClick={() => isReady && setMenuOpen((v) => !v)}
+            className="relative text-on-surface-variant hover:text-primary p-1"
+            onClick={() => setMenuOpen((v) => !v)}
           >
             <Icon name="more_vert" />
           </button>
           {menuOpen && (
-            <div className="absolute right-0 top-8 z-20 glass-panel rounded-lg p-1 flex flex-col w-40">
-              <button
-                type="button"
-                onClick={() => {
-                  setMenuOpen(false)
-                  onRecompile()
-                }}
-                disabled={isRecompiling}
-                className="px-3 py-2 text-label-sm flex items-center gap-2 text-on-surface hover:bg-white/10 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Icon name="sync" className={isRecompiling ? 'text-[16px] animate-spin' : 'text-[16px]'} />
-                {isRecompiling ? 'Recompiling...' : 'Recompile'}
-              </button>
-            </div>
+            <CardMenu
+              status={workspace.status}
+              isRecompiling={isRecompiling}
+              onRecompile={onRecompile}
+              onClose={() => setMenuOpen(false)}
+            />
           )}
         </div>
       </div>
