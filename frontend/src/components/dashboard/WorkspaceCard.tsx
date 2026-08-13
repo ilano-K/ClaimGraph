@@ -7,17 +7,43 @@ const INGRESS_BADGE: Record<WorkspaceSummary['ingress'], string> = {
   MCP: 'bg-tertiary/10 text-tertiary border border-tertiary/30',
 }
 
+const STATUS_FOOTERS: Record<
+  Exclude<WorkspaceSummary['status'], 'ready'>,
+  { icon: string; label: string; tone: string; spin?: boolean }
+> = {
+  compiling: {
+    icon: 'sync',
+    label: 'Compiling Graph...',
+    tone: 'text-tertiary bg-tertiary/10 border-tertiary/20',
+    spin: true,
+  },
+  awaiting: {
+    icon: 'hourglass_empty',
+    label: 'Awaiting documents',
+    tone: 'text-secondary bg-secondary/10 border-secondary/20',
+  },
+  failed: {
+    icon: 'error',
+    label: 'Compilation failed',
+    tone: 'text-error bg-error/10 border-error/20',
+  },
+}
+
+const METRIC_DOT: Record<string, string> = {
+  cyan: 'bg-cyan-400',
+  green: 'bg-emerald-500',
+  purple: 'bg-purple-400',
+  yellow: 'bg-yellow-400',
+  amber: 'bg-amber-400',
+  red: 'bg-red-500',
+}
+
 function MetricRow({ metric }: { metric: WorkspaceMetric }) {
   return (
     <div className="flex justify-between items-center">
       <span className="flex items-center gap-1">
         {metric.tone && (
-          <div
-            className={cn(
-              'w-1.5 h-1.5 rounded-full',
-              metric.tone === 'green' ? 'bg-emerald-500' : 'bg-error'
-            )}
-          />
+          <div className={cn('w-1.5 h-1.5 rounded-full', METRIC_DOT[metric.tone] ?? 'bg-error')} />
         )}
         {metric.label}
       </span>
@@ -48,12 +74,15 @@ function ReadyFooter({ onOpen }: { onOpen: () => void }) {
   )
 }
 
-function ProcessingFooter() {
+function ProcessingFooter({ status }: { status: Exclude<WorkspaceSummary['status'], 'ready'> }) {
+  const footer = STATUS_FOOTERS[status]
   return (
     <div className="px-5 py-4 bg-surface-container-low/50 border-t border-white/5 flex items-center justify-between">
-      <div className="flex items-center justify-center gap-2 w-full text-tertiary font-label-sm bg-tertiary/10 px-3 py-1.5 rounded border border-tertiary/20">
-        <Icon name="sync" className="text-[16px] animate-spin" />
-        Compiling Graph...
+      <div
+        className={`flex items-center justify-center gap-2 w-full font-label-sm px-3 py-1.5 rounded border ${footer.tone}`}
+      >
+        <Icon name={footer.icon} className={footer.spin ? 'text-[16px] animate-spin' : 'text-[16px]'} />
+        {footer.label}
       </div>
     </div>
   )
@@ -65,16 +94,16 @@ interface WorkspaceCardProps {
 }
 
 /**
- * One workspace tile in the Dashboard grid. Mirrors dashboard.html's two
- * states: `ready` (historical workspace, opens the graph canvas) and
- * `processing` (live MCP ingress currently compiling).
+ * One workspace tile in the Dashboard grid. Mirrors dashboard.html's states:
+ * `ready` (historical workspace, opens the graph canvas) and the non-ready
+ * ones surfaced as compiling / awaiting-documents / failed footers.
  */
 export default function WorkspaceCard({ workspace, onOpen }: WorkspaceCardProps) {
-  const isProcessing = workspace.status === 'processing'
+  const isReady = workspace.status === 'ready'
 
   return (
     <article className="glass-panel rounded-xl overflow-hidden flex flex-col group relative">
-      {isProcessing && (
+      {!isReady && (
         <div className="absolute inset-0 bg-surface-dim/30 z-10 pointer-events-none" />
       )}
 
@@ -101,22 +130,22 @@ export default function WorkspaceCard({ workspace, onOpen }: WorkspaceCardProps)
           type="button"
           className={cn(
             'relative text-on-surface-variant hover:text-primary p-1',
-            isProcessing && 'disabled:opacity-50'
+            !isReady && 'disabled:opacity-50'
           )}
-          disabled={isProcessing}
+          disabled={!isReady}
         >
           <Icon name="more_vert" />
         </button>
       </div>
 
-      <div className="p-5 flex-1 flex flex-col gap-4 relative">
+<div className="p-5 flex-1 flex flex-col gap-4 relative">
         <p className="font-body-sm text-body-sm text-on-surface-variant">
           {workspace.documentLabel}
         </p>
         <div
           className={cn(
             'bg-surface-container-low rounded p-3 text-mono font-mono text-label-sm text-on-surface-variant flex flex-col gap-2 border border-white/5',
-            isProcessing && 'opacity-50'
+            !isReady && 'opacity-50'
           )}
         >
           {workspace.metrics.map((metric) => (
@@ -125,10 +154,10 @@ export default function WorkspaceCard({ workspace, onOpen }: WorkspaceCardProps)
         </div>
       </div>
 
-      {isProcessing ? (
-        <ProcessingFooter />
-      ) : (
+      {workspace.status === 'ready' ? (
         <ReadyFooter onOpen={onOpen} />
+      ) : (
+        <ProcessingFooter status={workspace.status} />
       )}
     </article>
   )

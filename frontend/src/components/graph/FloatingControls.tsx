@@ -4,6 +4,7 @@ interface FloatingControlsProps {
   onZoomIn: () => void
   onZoomOut: () => void
   onFit: () => void
+  onSweep: () => void
   onToggleFullscreen: () => void
   isFullscreen: boolean
 }
@@ -12,6 +13,7 @@ export default function FloatingControls({
   onZoomIn,
   onZoomOut,
   onFit,
+  onSweep,
   onToggleFullscreen,
   isFullscreen,
 }: FloatingControlsProps) {
@@ -35,6 +37,14 @@ export default function FloatingControls({
           <Icon name="remove" />
         </button>
         <div className="h-px bg-outline-variant/50 w-full my-1"></div>
+        <button
+          type="button"
+          className="p-2 text-on-surface hover:bg-white/10 rounded transition-colors"
+          aria-label="Sweep layout"
+          onClick={onSweep}
+        >
+          <Icon name="sweep" />
+        </button>
         <button
           type="button"
           className="p-2 text-on-surface hover:bg-white/10 rounded transition-colors"

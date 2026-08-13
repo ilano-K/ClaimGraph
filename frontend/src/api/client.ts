@@ -8,7 +8,8 @@ export const API_BASE_URL = 'http://127.0.0.1:8000'
 
 /** Centralized endpoint paths so a backend re-route is a one-line change. */
 export const ENDPOINTS = {
-  createWorkspace: `${API_BASE_URL}/workspaces/create`,
+  listWorkspaces: `${API_BASE_URL}/api/workspaces/`,
+  createWorkspace: `${API_BASE_URL}/api/workspaces/create`,
   uploadDocuments: (workspaceId: string) =>
     `${API_BASE_URL}/api/workspaces/${workspaceId}/documents/upload`,
   compileWorkspace: (workspaceId: string) =>
@@ -50,6 +51,12 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 export interface CreateWorkspaceInput {
   name: string
   description: string
+}
+
+export function listWorkspaces(): Promise<WorkspaceResponse[]> {
+  return request<WorkspaceResponse[]>(ENDPOINTS.listWorkspaces, {
+    method: 'POST',
+  })
 }
 
 export function createWorkspace(input: CreateWorkspaceInput): Promise<WorkspaceResponse> {

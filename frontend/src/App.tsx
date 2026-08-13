@@ -5,7 +5,7 @@ import InspectionPanel from './components/inspector/InspectionPanel'
 import OnboardingFlow from './components/onboarding/OnboardingFlow'
 import Dashboard from './components/dashboard/Dashboard'
 import { mapGraphPayload, type MappedGraph } from './lib/mapGraph'
-import type { CompileResponse } from './api/types'
+import type { CompileResponse, GraphPayload, WorkspaceResponse } from './api/types'
 
 type Screen = 'onboarding' | 'dashboard' | 'workspace'
 
@@ -35,6 +35,30 @@ export default function App() {
     })
   }, [])
 
+  const handleLayoutNodes = useCallback((positions: Record<string, { x: number; y: number }>) => {
+    setGraph((prev) => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        nodes: prev.nodes.map((node) => {
+          const point = positions[node.id]
+          if (!point) return node
+          return { ...node, presentation: { ...node.presentation, ...point } }
+        }),
+      }
+    })
+  }, [])
+
+  const handleOpenWorkspace = useCallback((workspace: WorkspaceResponse) => {
+    const payload = workspace.graph_payload
+    if (payload) {
+      setGraph(mapGraphPayload(payload as unknown as GraphPayload))
+      setActiveNodeId(null)
+      setHoveredNodeId(null)
+    }
+    setScreen('workspace')
+  }, [])
+
   if (screen === 'onboarding') {
     return (
       <OnboardingFlow
@@ -49,7 +73,7 @@ export default function App() {
     return (
       <Dashboard
         onNewWorkspace={() => setScreen('onboarding')}
-        onOpenWorkspace={() => setScreen('workspace')}
+        onOpenWorkspace={handleOpenWorkspace}
       />
     )
   }
@@ -90,6 +114,7 @@ export default function App() {
           onSelectNode={setActiveNodeId}
           onHoverNode={setHoveredNodeId}
           onMoveNode={handleMoveNode}
+          onLayoutNodes={handleLayoutNodes}
         />
         {activeNode && <InspectionPanel node={activeNode} />}
       </main>
