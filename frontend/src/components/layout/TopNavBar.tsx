@@ -40,11 +40,23 @@ function NavItem({ item }: { item: NavItemDef }) {
 interface TopNavBarProps {
   metadata: WorkspaceMetadata
   onNavigateToDashboard: () => void
+  isRecompiling: boolean
+  recompileError: string | null
+  onRecompile: () => void
+  onDismissRecompileError: () => void
 }
 
-export default function TopNavBar({ metadata, onNavigateToDashboard }: TopNavBarProps) {
+export default function TopNavBar({
+  metadata,
+  onNavigateToDashboard,
+  isRecompiling,
+  recompileError,
+  onRecompile,
+  onDismissRecompileError,
+}: TopNavBarProps) {
   return (
-    <header className="flex justify-between items-center px-gutter h-16 bg-surface/60 backdrop-blur-xl border-b border-white/10 shrink-0">
+    <>
+      <header className="flex justify-between items-center px-gutter h-16 bg-surface/60 backdrop-blur-xl border-b border-white/10 shrink-0">
       {/* Left: Brand & Document Info */}
       <div className="flex items-center gap-4 min-w-0">
         <div className="flex items-center gap-2 shrink-0">
@@ -86,6 +98,15 @@ export default function TopNavBar({ metadata, onNavigateToDashboard }: TopNavBar
         </button>
         <button
           type="button"
+          onClick={onRecompile}
+          disabled={isRecompiling}
+          className="bg-primary-container text-on-primary-container font-label-md px-4 py-2 rounded-lg hover:bg-primary-fixed transition-colors flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          <Icon name="sync" className={isRecompiling ? '!text-[18px] animate-spin' : '!text-[18px]'} />
+          <span className="hidden sm:inline">{isRecompiling ? 'Recompiling...' : 'Recompile'}</span>
+        </button>
+        <button
+          type="button"
           className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-white/5 rounded-lg transition-all"
           aria-label="Dashboard"
           onClick={onNavigateToDashboard}
@@ -101,5 +122,19 @@ export default function TopNavBar({ metadata, onNavigateToDashboard }: TopNavBar
         </button>
       </div>
     </header>
+      {recompileError && (
+        <div className="flex items-center justify-between gap-4 px-gutter py-2 bg-error/10 border-b border-error/20 text-error text-label-sm">
+          <span className="leading-snug">{recompileError}</span>
+          <button
+            type="button"
+            onClick={onDismissRecompileError}
+            className="p-1 rounded hover:bg-white/10 transition-colors shrink-0"
+            aria-label="Dismiss error"
+          >
+            <Icon name="close" className="text-[16px]" />
+          </button>
+        </div>
+      )}
+    </>
   )
 }

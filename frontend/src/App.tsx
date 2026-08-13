@@ -133,6 +133,10 @@ export default function App() {
       <TopNavBar
         metadata={graph.metadata}
         onNavigateToDashboard={() => setScreen('dashboard')}
+        isRecompiling={isRecompiling}
+        recompileError={recompileError}
+        onRecompile={handleRecompile}
+        onDismissRecompileError={() => setRecompileError(null)}
       />
       <main className="flex-1 relative flex overflow-hidden">
         <GraphCanvas
@@ -140,12 +144,9 @@ export default function App() {
           edges={graph.edges}
           activeNodeId={activeNodeId}
           hoveredNodeId={hoveredNodeId}
-          isRecompiling={isRecompiling}
-          recompileError={recompileError}
           refitSignal={refitSignal}
           onSelectNode={setActiveNodeId}
           onHoverNode={setHoveredNodeId}
-          onRecompile={handleRecompile}
           onMoveNode={handleMoveNode}
           onLayoutNodes={handleLayoutNodes}
         />
