@@ -10,6 +10,11 @@ from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling.datamodel.base_models import InputFormat
 from docling.document_converter import DocumentConverter
 
+import logging
+import time
+
+logger = logging.getLogger(__name__)
+
 converter = DocumentConverter()
 
 # _pipeline_options = PdfPipelineOptions(do_ocr=False)
@@ -26,7 +31,15 @@ chunker = HybridChunker(
 
 def parse_document_to_markdown(file_path: str):
     """Convert the file at ``file_path`` to Markdown text for LLM extraction."""
-    return converter.convert(file_path).document.export_to_markdown()
+    start = time.perf_counter()
+    logger.info("parsing document: %s", file_path)
+    result = converter.convert(file_path).document.export_to_markdown()
+    logger.info(
+        "parsed document: %s in %dms",
+        file_path,
+        round((time.perf_counter() - start) * 1000),
+    )
+    return result
 
 def parse_and_chunk_document(file_path: str):
     """Convert ``file_path`` and split it into semantic chunks (used for retrieval)."""

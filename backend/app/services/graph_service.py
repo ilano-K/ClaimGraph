@@ -15,6 +15,10 @@ from app.enums.node import EdgeRelation
 from app.core.exceptions import InvalidLLMResponseError
 from typing import List
 import json
+import logging
+import time
+
+logger = logging.getLogger(__name__)
 
 
 def to_react_flow_nodes(nodes: List[GraphNode]) -> List[ReactFlowNode]:
@@ -66,38 +70,56 @@ def generate_claim_graph(documents) -> GraphPayload:
     must appear among the returned nodes' ``document_id`` fields; otherwise the
     response cannot be quote-validated and ``InvalidLLMResponseError`` is raised.
     """
+    start = time.perf_counter()
+    logger.info(
+        "generate_claim_graph entry provider=%s model=%s documents=%d",
+        settings.llm_provider,
+        settings.llm_model_name,
+        len(documents),
+    )
+
     client = create_client()
-    
+
     result = client.chat.completions.create(
-        model = settings.llm_model_name,
+        model=settings.llm_model_name,
         response_model=GraphPayload,
         messages=[
-        {
-            "role": "system",
-            "content": SYSTEM_PROMPT,
-        },
-        {
-            "role": "user",
-            "content": json.dumps(documents, ensure_ascii=False),
-        },
-    ],
-    ) 
-    
+            {
+                "role": "system",
+                "content": SYSTEM_PROMPT,
+            },
+            {
+                "role": "user",
+                "content": json.dumps(documents, ensure_ascii=False),
+            },
+        ],
+    )
+
     input_document_ids = {
         document["document_id"]
-        for document in documents 
+        for document in documents
     }
-    
+
     returned_document_ids = {
-        node.document_id 
+        node.document_id
         for node in result.nodes
     }
-    
+
     # Any input document with no node attributed to it means the LLM dropped
     # or renamed an id; fail loudly rather than silently skipping validation.
     invalid_document_ids = (input_document_ids - returned_document_ids)
-    
+
     if invalid_document_ids:
+        logger.error(
+            "generate_claim_graph invalid LLM response missing document_ids=%s",
+            sorted(invalid_document_ids),
+        )
         raise InvalidLLMResponseError()
-    
+
+    logger.info(
+        "generate_claim_graph success in %dms nodes=%d edges=%d",
+        round((time.perf_counter() - start) * 1000),
+        len(result.nodes),
+        len(result.edges),
+    )
     return result
