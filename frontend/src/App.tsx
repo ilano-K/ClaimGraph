@@ -5,6 +5,7 @@ import InspectionPanel from './components/inspector/InspectionPanel'
 import OnboardingFlow from './components/onboarding/OnboardingFlow'
 import Dashboard from './components/dashboard/Dashboard'
 import { mapGraphPayload, type MappedGraph } from './lib/mapGraph'
+import { recompileWorkspace } from './api/client'
 import type { CompileResponse, GraphPayload, WorkspaceResponse } from './api/types'
 
 type Screen = 'onboarding' | 'dashboard' | 'workspace'
@@ -14,6 +15,10 @@ export default function App() {
   const [graph, setGraph] = useState<MappedGraph | null>(null)
   const [activeNodeId, setActiveNodeId] = useState<string | null>(null)
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null)
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null)
+  const [isRecompiling, setIsRecompiling] = useState(false)
+  const [recompileError, setRecompileError] = useState<string | null>(null)
+  const [refitSignal, setRefitSignal] = useState(0)
 
   const handleGraphCompiled = useCallback((result: CompileResponse) => {
     const mapped = mapGraphPayload(result.graph)
@@ -56,14 +61,38 @@ export default function App() {
       setActiveNodeId(null)
       setHoveredNodeId(null)
     }
+    setWorkspaceId(workspace.id)
+    setIsRecompiling(false)
+    setRecompileError(null)
     setScreen('workspace')
   }, [])
+
+  const handleRecompile = useCallback(async () => {
+    if (!workspaceId) return
+    setIsRecompiling(true)
+    setRecompileError(null)
+    try {
+      const result = await recompileWorkspace(workspaceId)
+      setGraph(mapGraphPayload(result.graph))
+      setActiveNodeId(result.graph.nodes[0]?.id ?? null)
+      setRefitSignal((n) => n + 1)
+    } catch (err) {
+      setRecompileError(err instanceof Error ? err.message : 'Recompile failed.')
+    } finally {
+      setIsRecompiling(false)
+    }
+  }, [workspaceId])
 
   if (screen === 'onboarding') {
     return (
       <OnboardingFlow
         onGraphCompiled={handleGraphCompiled}
-        onOpenWorkspace={() => setScreen('workspace')}
+        onOpenWorkspace={(workspace) => {
+          setWorkspaceId(workspace.id)
+          setIsRecompiling(false)
+          setRecompileError(null)
+          setScreen('workspace')
+        }}
         onSkip={() => setScreen('dashboard')}
       />
     )
@@ -111,8 +140,12 @@ export default function App() {
           edges={graph.edges}
           activeNodeId={activeNodeId}
           hoveredNodeId={hoveredNodeId}
+          isRecompiling={isRecompiling}
+          recompileError={recompileError}
+          refitSignal={refitSignal}
           onSelectNode={setActiveNodeId}
           onHoverNode={setHoveredNodeId}
+          onRecompile={handleRecompile}
           onMoveNode={handleMoveNode}
           onLayoutNodes={handleLayoutNodes}
         />

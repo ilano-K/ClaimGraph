@@ -26,7 +26,7 @@ const STEPS = {
 type Step = keyof typeof STEPS
 
 interface OnboardingFlowProps {
-  onOpenWorkspace: () => void
+  onOpenWorkspace: (workspace: WorkspaceResponse) => void
   onSkip: () => void
   onGraphCompiled: (result: CompileResponse) => void
 }
@@ -141,8 +141,8 @@ export default function OnboardingFlow({
 
   const handleOpenWorkspace = useCallback(() => {
     if (compileResult) onGraphCompiled(compileResult)
-    onOpenWorkspace()
-  }, [compileResult, onGraphCompiled, onOpenWorkspace])
+    if (workspace) onOpenWorkspace(workspace)
+  }, [compileResult, onGraphCompiled, onOpenWorkspace, workspace])
 
   return (
     <div className="text-on-background font-body-md bg-background min-h-screen flex flex-col overflow-x-hidden antialiased">
