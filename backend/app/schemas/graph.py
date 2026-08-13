@@ -21,7 +21,7 @@ class DocumentAnalysis(BaseModel):
     metadata: DocumentMetadata
     executive_summary: str = Field(
         ...,
-        description="A 3-sentence executive summary of the paper's architecture and trade-offs.")
+        description="A 3-sentence executive summary of the paper's architecture, limitations, and risks.")
     
 class GraphPayload(BaseModel):
     """The complete semantic graph: per-document analysis plus all nodes and edges."""

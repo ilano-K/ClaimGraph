@@ -13,7 +13,6 @@ def create_document(
     status: DocumentStatus,
     claim_count: int,
     evidence_count: int,
-    tradeoff_count: int,
 ) -> Document:
     document = Document(
         id=id,
@@ -23,7 +22,6 @@ def create_document(
         status=status,
         claim_count=claim_count,
         evidence_count=evidence_count,
-        tradeoff_count=tradeoff_count,
     )
 
     db.add(document)

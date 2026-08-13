@@ -67,6 +67,5 @@ class Document(Base):
     status: Mapped[DocumentStatus] = mapped_column(Enum(DocumentStatus), default=DocumentStatus.QUEUED)
     claim_count: Mapped[int] = mapped_column(Integer, default=0)
     evidence_count: Mapped[int] = mapped_column(Integer, default=0)
-    tradeoff_count: Mapped[int] = mapped_column(Integer, default=0)
     
     

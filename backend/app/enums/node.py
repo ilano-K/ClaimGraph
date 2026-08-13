@@ -7,14 +7,17 @@ class NodeCategory(str, Enum):
 
     CLAIM = "claim"
     EVIDENCE = "evidence"
-    TRADEOFF = "tradeoff"
     METHODOLOGY = "methodology"
+    LIMITATION = "limitation"
+    RISK = "risk"
+    CONSEQUENCE = "consequence"
 
 class EdgeRelation(str, Enum):
     """Directional relationship types used to connect two nodes."""
 
     SUPPORTS = "supports"
     LIMITS = "limits"
-    DEPENDS_ON = "depends_on"
+    CAUSES = "causes"
+    CHALLENGES = "challenges"
 
     

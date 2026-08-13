@@ -13,6 +13,7 @@ from app.prompts.claim_graph import SYSTEM_PROMPT
 from app.schemas.reactflow import ReactFlowNode, ReactFlowEdge, ReactFlowStyle
 from app.enums.node import EdgeRelation
 from app.core.exceptions import InvalidLLMResponseError
+from app.services.text_cleanup import normalize_graph_payload
 from typing import List
 import json
 import logging
@@ -35,16 +36,20 @@ def to_react_flow_nodes(nodes: List[GraphNode]) -> List[ReactFlowNode]:
 
 
 # Visual styling + animation per edge relation type (shown on the canvas).
+# Energy tint falls back to a per-relation accent; the frontend can override
+# SUPPORTS to match the source node's color.
 EDGE_STYLE = {
-    EdgeRelation.LIMITS: ReactFlowStyle(stroke="#DC2626", strokeWidth=2),
-    EdgeRelation.SUPPORTS: ReactFlowStyle(stroke="#16A34A", strokeWidth=2),
-    EdgeRelation.DEPENDS_ON: ReactFlowStyle(stroke="#2563EB", strokeWidth=2),
+    EdgeRelation.SUPPORTS: ReactFlowStyle(stroke="#22D3EE", strokeWidth=2),
+    EdgeRelation.LIMITS: ReactFlowStyle(stroke="#FACC15", strokeWidth=2),
+    EdgeRelation.CAUSES: ReactFlowStyle(stroke="#F97316", strokeWidth=3),
+    EdgeRelation.CHALLENGES: ReactFlowStyle(stroke="#EF4444", strokeWidth=4),
 }
 
 EDGE_ANIMATED = {
-    EdgeRelation.LIMITS: True,
     EdgeRelation.SUPPORTS: False,
-    EdgeRelation.DEPENDS_ON: False,
+    EdgeRelation.LIMITS: True,
+    EdgeRelation.CAUSES: False,
+    EdgeRelation.CHALLENGES: False,
 }
 
 
@@ -93,7 +98,13 @@ def generate_claim_graph(documents) -> GraphPayload:
                 "content": json.dumps(documents, ensure_ascii=False),
             },
         ],
+        extra_body={"thinking": {"type": "disabled"}},
     )
+
+    # The LLM sometimes HTML-escapes characters in the prose it authors
+    # (e.g. `Gabriela&#39;s`); decode them so stored payloads are plain text.
+    # Verbatim node quotes are intentionally left untouched.
+    normalize_graph_payload(result)
 
     input_document_ids = {
         document["document_id"]
@@ -111,8 +122,29 @@ def generate_claim_graph(documents) -> GraphPayload:
 
     if invalid_document_ids:
         logger.error(
-            "generate_claim_graph invalid LLM response missing document_ids=%s",
+            "generate_claim_graph invalid LLM response: "
+            "missing document_ids=%s",
             sorted(invalid_document_ids),
+        )
+        logger.error(
+            "generate_claim_graph input_document_ids=%s",
+            sorted(input_document_ids),
+        )
+        logger.error(
+            "generate_claim_graph returned_document_ids=%s",
+            sorted(returned_document_ids),
+        )
+        logger.error(
+            "generate_claim_graph returned_nodes=%s",
+            [
+                {
+                    "id": node.id,
+                    "document_id": node.document_id,
+                    "node_category": node.node_category.value,
+                    "title": node.title,
+                }
+                for node in result.nodes
+            ],
         )
         raise InvalidLLMResponseError()
 

@@ -28,5 +28,5 @@ class GraphEdge(BaseModel):
     id: str
     source: str = Field(description="The ID of the origin node. ")
     target: str = Field(description="The ID of the destination node.")
-    relation: EdgeRelation = Field(description="Relation ship between two nodes (SUPPORTS, LIMITS, DEPENDS_ON)")
+    relation: EdgeRelation = Field(description="Relation ship between two nodes (SUPPORTS, LIMITS, CAUSES, CHALLENGES)")
     reasoning: str = Field(description="One sentence explanation of why these nodes are linked.")

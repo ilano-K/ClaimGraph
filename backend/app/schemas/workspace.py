@@ -13,7 +13,6 @@ class DocumentResponse(BaseModel):
     status: str
     claim_count: int
     evidence_count: int
-    tradeoff_count: int
     
     model_config = ConfigDict(from_attributes=True)
     
@@ -33,12 +32,9 @@ class WorkspaceCreateRequest(BaseModel):
     name: str
     description: str
 
-class WorkspaceCompileRequest(BaseModel):
-    workspace_id: str
-
 class WorkspaceCompileResponse(BaseModel):
     """
-    The final HTTP Response schema returned by POST /api/compile-text and /api/compile-pdf.
+    The final HTTP Response schema returned by POST /api/workspaces/compile.
     """
     success: bool = Field(default=True)
     message: str = Field(default="Graph compilation successful.")
