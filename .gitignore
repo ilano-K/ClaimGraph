@@ -27,3 +27,7 @@ backend/tests/
 # scratch / session files
 dashboard.html
 session-*.md
+README.md
+
+# runtime uploaded document data
+backend/claimgraph/data/
