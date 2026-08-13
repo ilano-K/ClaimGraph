@@ -3,6 +3,8 @@ import NodeCard from './NodeCard'
 import ConnectionLines from './ConnectionLines'
 import FloatingControls from './FloatingControls'
 import RelationshipFilterDropdown from './RelationshipFilterDropdown'
+import ContentModeToggle from './ContentModeToggle'
+import type { ContentMode } from './ContentModeToggle'
 import { FILTER_OPTIONS } from '../../lib/relationshipFilter'
 import type { RelationshipFilter } from '../../lib/relationshipFilter'
 import { buildEdgePath, edgeMidpoint, worldBounds } from '../../lib/graphGeometry'
@@ -79,6 +81,7 @@ export default function GraphCanvas({
   const [nodeSizes, setNodeSizes] = useState<Record<string, NodeSize>>({})
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [contentMode, setContentMode] = useState<ContentMode>('collapsed')
 
   useEffect(() => {
     const handleFullscreenChange = () => setIsFullscreen(Boolean(document.fullscreenElement))
@@ -375,6 +378,7 @@ export default function GraphCanvas({
             key={node.id}
             node={node}
             isActive={node.id === activeNodeId}
+            contentMode={contentMode}
             isDragging={node.id === draggingNodeId}
             onSelect={onSelectNode}
             onHover={onHoverNode}
@@ -391,8 +395,9 @@ export default function GraphCanvas({
         onToggleFullscreen={toggleFullscreen}
         isFullscreen={isFullscreen}
       />
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20">
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2">
         <RelationshipFilterDropdown value={filter} onChange={onFilterChange} />
+        <ContentModeToggle value={contentMode} onChange={setContentMode} />
       </div>
       {filter !== 'all' && nodes.length === 0 && (
         <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 glass-panel rounded-lg px-4 py-2 font-label-sm text-on-surface-variant">
