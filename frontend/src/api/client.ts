@@ -14,6 +14,8 @@ export const ENDPOINTS = {
     `${API_BASE_URL}/api/workspaces/${workspaceId}/documents/upload`,
   compileWorkspace: (workspaceId: string) =>
     `${API_BASE_URL}/api/workspaces/${workspaceId}/compile`,
+  recompileWorkspace: (workspaceId: string) =>
+    `${API_BASE_URL}/api/workspaces/${workspaceId}/recompile`,
 }
 
 export class ApiError extends Error {
@@ -80,6 +82,12 @@ export function uploadDocuments(workspaceId: string, files: File[]): Promise<unk
 
 export function compileWorkspace(workspaceId: string): Promise<CompileResponse> {
   return request<CompileResponse>(ENDPOINTS.compileWorkspace(workspaceId), {
+    method: 'POST',
+  })
+}
+
+export function recompileWorkspace(workspaceId: string): Promise<CompileResponse> {
+  return request<CompileResponse>(ENDPOINTS.recompileWorkspace(workspaceId), {
     method: 'POST',
   })
 }
