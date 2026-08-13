@@ -68,25 +68,45 @@ body {
 }
 
 .connection-line {
-  stroke: rgba(140, 144, 159, 0.3); /* outline at 30% */
-  stroke-width: 2;
   fill: none;
-  stroke-dasharray: 4 4;
-  animation: dash 20s linear infinite;
+  stroke-width: 2;
+  transition: filter 0.2s ease-in-out;
 }
 
 .connection-line.highlighted {
-  stroke: rgba(255, 255, 255, 0.4);
+  filter: brightness(1.8);
   stroke-width: 3;
 }
 
-/* Edge arrowheads */
-.edge-arrow {
-  fill: rgba(140, 144, 159, 0.5);
+/* Edge verb styling. Stroke color is set inline per edge (SUPPORTS inherits
+   the source node accent; LIMITS/CAUSES/CHALLENGES use fixed tints). */
+.edge-supports {
+  stroke-dasharray: none;
 }
 
-.edge-arrow.highlighted {
-  fill: rgba(255, 255, 255, 0.55);
+.edge-limits {
+  stroke-dasharray: 6 6;
+  animation: edge-pulse 4s ease-in-out infinite;
+}
+
+.edge-causes {
+  stroke-width: 3;
+  stroke-dasharray: none;
+}
+
+.edge-challenges {
+  stroke-width: 4;
+  stroke-dasharray: 8 6;
+}
+
+@keyframes edge-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 /* Edge relation labels */
@@ -105,25 +125,12 @@ body {
   pointer-events: none;
 }
 
-@keyframes dash {
-  to {
-    stroke-dashoffset: -100;
-  }
-}
-
 /* Specific node accent borders */
 .node-red {
   border-top: 2px solid #ef4444;
 }
 .node-red.active {
   box-shadow: 0 0 15px rgba(239, 68, 68, 0.2);
-}
-
-.node-blue {
-  border-top: 2px solid #3b82f6;
-}
-.node-blue.active {
-  box-shadow: 0 0 15px rgba(59, 130, 246, 0.2);
 }
 
 .node-green {
@@ -138,6 +145,27 @@ body {
 }
 .node-purple.active {
   box-shadow: 0 0 15px rgba(139, 92, 246, 0.2);
+}
+
+.node-cyan {
+  border-top: 2px solid #22d3ee;
+}
+.node-cyan.active {
+  box-shadow: 0 0 15px rgba(34, 211, 238, 0.2);
+}
+
+.node-yellow {
+  border-top: 2px solid #eab308;
+}
+.node-yellow.active {
+  box-shadow: 0 0 15px rgba(234, 179, 8, 0.2);
+}
+
+.node-amber {
+  border-top: 2px solid #f59e0b;
+}
+.node-amber.active {
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.2);
 }
 
 /* Minimal scrollbar */

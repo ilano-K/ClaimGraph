@@ -3,6 +3,7 @@ import NodeCard from './NodeCard'
 import ConnectionLines from './ConnectionLines'
 import FloatingControls from './FloatingControls'
 import { buildEdgePath, edgeMidpoint, worldBounds } from '../../lib/graphGeometry'
+import { computeSweepLayout } from '../../lib/sweepLayout'
 import { clamp } from '../../lib/utils'
 import type { GraphEdgeView, GraphNodeView } from '../../api/types'
 
@@ -42,6 +43,7 @@ interface GraphCanvasProps {
   onSelectNode: (id: string) => void
   onHoverNode: (id: string | null) => void
   onMoveNode: (nodeId: string, x: number, y: number) => void
+  onLayoutNodes: (positions: Record<string, { x: number; y: number }>) => void
 }
 
 /**
@@ -58,6 +60,7 @@ export default function GraphCanvas({
   onSelectNode,
   onHoverNode,
   onMoveNode,
+  onLayoutNodes,
 }: GraphCanvasProps) {
   const viewportRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<DragState | null>(null)
@@ -206,6 +209,25 @@ export default function GraphCanvas({
     return () => observer.disconnect()
   }, [fitToContent])
 
+  /* ------------------------------------------------------------------ */
+  /* Sweep layout                                                        */
+  /* ------------------------------------------------------------------ */
+
+  const handleSweep = useCallback(() => {
+    const positions = computeSweepLayout(
+      sizedNodes.map((node) => ({
+        id: node.id,
+        width: node.presentation.width,
+        height: node.presentation.height,
+      })),
+      edges.map((edge) => ({ source: edge.source, target: edge.target }))
+    )
+    const positionMap: Record<string, { x: number; y: number }> = {}
+    for (const [id, point] of positions) positionMap[id] = point
+    onLayoutNodes(positionMap)
+    requestAnimationFrame(() => fitToContent())
+  }, [sizedNodes, edges, onLayoutNodes, fitToContent])
+
   const handleWheel = useCallback(
     (e: WheelEvent) => {
       e.preventDefault()
@@ -322,7 +344,7 @@ export default function GraphCanvas({
           transformOrigin: '0 0',
         }}
       >
-        <ConnectionLines edges={routedEdges} highlighted={hoveredNodeId !== null} />
+        <ConnectionLines edges={routedEdges} nodes={sizedNodes} highlighted={hoveredNodeId !== null} />
         {nodes.map((node) => (
           <NodeCard
             key={node.id}
@@ -340,6 +362,7 @@ export default function GraphCanvas({
         onZoomIn={() => zoomCenter(1.2)}
         onZoomOut={() => zoomCenter(1 / 1.2)}
         onFit={fitToContent}
+        onSweep={handleSweep}
         onToggleFullscreen={toggleFullscreen}
         isFullscreen={isFullscreen}
       />
