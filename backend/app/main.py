@@ -44,6 +44,14 @@ app.include_router(api_router)
 # Render any AppException subclass as a JSON error with its status/detail.
 @app.exception_handler(AppException)
 def app_exception_handler(req: Request, exc: AppException):
+    logger.error(
+        "AppException handled: %s %s -> %d %s",
+        req.method,
+        req.url.path,
+        exc.status_code,
+        exc.detail,
+        exc_info=exc,
+    )
     return JSONResponse(
         status_code=exc.status_code,
         content={"detail": exc.detail}
