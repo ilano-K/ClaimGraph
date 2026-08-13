@@ -243,6 +243,16 @@ export default function GraphCanvas({
     requestAnimationFrame(() => fitToContent())
   }, [sizedNodes, edges, onLayoutNodes, fitToContent])
 
+  // Auto-sweep the (filtered) visible graph whenever the relationship filter
+  // changes, so each isolated pathway re-lays itself out. Skipped on the
+  // initial render since the graph is already laid out then.
+  const previousFilterRef = useRef(filter)
+  useEffect(() => {
+    if (previousFilterRef.current === filter) return
+    previousFilterRef.current = filter
+    handleSweep()
+  }, [filter, handleSweep])
+
   const handleWheel = useCallback(
     (e: WheelEvent) => {
       e.preventDefault()
