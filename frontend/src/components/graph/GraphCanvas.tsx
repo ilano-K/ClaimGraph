@@ -40,8 +40,12 @@ interface GraphCanvasProps {
   edges: GraphEdgeView[]
   activeNodeId: string | null
   hoveredNodeId: string | null
+  isRecompiling: boolean
+  recompileError: string | null
+  refitSignal: number
   onSelectNode: (id: string) => void
   onHoverNode: (id: string | null) => void
+  onRecompile: () => void
   onMoveNode: (nodeId: string, x: number, y: number) => void
   onLayoutNodes: (positions: Record<string, { x: number; y: number }>) => void
 }
@@ -57,8 +61,12 @@ export default function GraphCanvas({
   edges,
   activeNodeId,
   hoveredNodeId,
+  isRecompiling,
+  recompileError,
+  refitSignal,
   onSelectNode,
   onHoverNode,
+  onRecompile,
   onMoveNode,
   onLayoutNodes,
 }: GraphCanvasProps) {
@@ -208,6 +216,12 @@ export default function GraphCanvas({
     observer.observe(el)
     return () => observer.disconnect()
   }, [fitToContent])
+
+  useEffect(() => {
+    if (refitSignal <= 0) return
+    hasFittedRef.current = false
+    fitToContent()
+  }, [refitSignal, fitToContent])
 
   /* ------------------------------------------------------------------ */
   /* Sweep layout                                                        */
@@ -365,6 +379,9 @@ export default function GraphCanvas({
         onSweep={handleSweep}
         onToggleFullscreen={toggleFullscreen}
         isFullscreen={isFullscreen}
+        isRecompiling={isRecompiling}
+        recompileError={recompileError}
+        onRecompile={onRecompile}
       />
     </div>
   )
