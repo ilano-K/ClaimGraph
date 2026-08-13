@@ -24,6 +24,10 @@ def _elapsed_ms(start: float) -> int:
     return round((time.perf_counter() - start) * 1000)
 
 
+@router.post('/')
+def get_all_workspaces(db: Session = Depends(get_db)):
+    return workspace_service.get_all_workspaces(db)
+
 @router.post('/create', response_model=WorkspaceResponse)
 def create_workspace(
     payload: WorkspaceCreateRequest,
@@ -53,6 +57,9 @@ def compile_workspace(workspace_id: str, db: Session = Depends(get_db)):
     logger.info("compile_workspace success in %dms", _elapsed_ms(start))
     return result
 
+@router.post('/{workspace_id}/recompile', response_model=WorkspaceCompileResponse)
+def recompile_workspace(workspace_id: str, db: Session = Depends(get_db)):
+    return workspace_service.recompile_workspace(db, workspace_id )
 
 @router.patch('/{workspace_id}', response_model=WorkspaceResponse)
 def update_workspace(

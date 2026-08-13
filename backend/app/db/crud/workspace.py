@@ -25,6 +25,10 @@ def get_workspace(
 
     return db.scalar(stmt)
 
+def get_all_workspaces(db: Session) -> list[Workspace]:
+    stmt = select(Workspace)
+    return db.scalars(stmt).all()
+
 def update_workspace(
     db: Session,
     workspace: Workspace,

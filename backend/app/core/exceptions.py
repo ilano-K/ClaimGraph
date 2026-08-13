@@ -54,3 +54,7 @@ class WorkspaceDocumentNotFoundError(AppException):
     """Raised when one or more requested documents do not belong to the workspace"""
     status_code: int = 404
     detail: str = "One or more documents not found in workspace"
+
+class WorkspaceRetrievalError(AppException):
+    status_code: int = 505
+    detail: str = "Failed to retrieve workspaces"
