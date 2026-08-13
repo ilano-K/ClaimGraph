@@ -1,12 +1,14 @@
-import { memo, useEffect, useRef, type PointerEvent } from 'react'
+import { memo, useEffect, useRef, useState, type PointerEvent } from 'react'
 import Icon from '../ui/Icon'
 import { cn, formatConfidence } from '../../lib/utils'
 import { NODE_TONES } from '../../data/mockData'
 import type { GraphNodeView } from '../../api/types'
+import type { ContentMode } from './ContentModeToggle'
 
 interface NodeCardProps {
   node: GraphNodeView
   isActive: boolean
+  contentMode?: ContentMode
   isDragging: boolean
   onSelect: (id: string) => void
   onHover: (id: string | null) => void
@@ -21,6 +23,7 @@ interface NodeCardProps {
 function NodeCard({
   node,
   isActive,
+  contentMode = 'collapsed',
   isDragging,
   onSelect,
   onHover,
@@ -30,6 +33,8 @@ function NodeCard({
   const { presentation } = node
   const tone = NODE_TONES[presentation.tone]
   const cardRef = useRef<HTMLDivElement>(null)
+  const [hovered, setHovered] = useState(false)
+  const showContent = contentMode === 'expanded' || hovered
 
   useEffect(() => {
     const el = cardRef.current
@@ -59,8 +64,14 @@ function NodeCard({
       style={{ top: presentation.y, left: presentation.x, width: presentation.width }}
       onPointerDown={(e) => onNodePointerDown(node, e)}
       onClick={() => onSelect(node.id)}
-      onMouseEnter={() => onHover(node.id)}
-      onMouseLeave={() => onHover(null)}
+      onMouseEnter={() => {
+        setHovered(true)
+        onHover(node.id)
+      }}
+      onMouseLeave={() => {
+        setHovered(false)
+        onHover(null)
+      }}
     >
       <div className="flex justify-between items-start gap-2">
         <span
@@ -76,13 +87,17 @@ function NodeCard({
       <h3 className="font-headline-md text-headline-md text-on-surface !text-lg leading-tight">
         {node.title}
       </h3>
-      <p className="text-[13px] text-on-surface-variant leading-relaxed">{node.summary}</p>
-      <div className="mt-1 h-1 w-full bg-surface-container rounded-full overflow-hidden">
-        <div
-          className={cn('h-full', tone.progress)}
-          style={{ width: formatConfidence(node.confidence_score) }}
-        ></div>
-      </div>
+      {showContent && (
+        <>
+          <p className="text-[13px] text-on-surface-variant leading-relaxed">{node.summary}</p>
+          <div className="mt-1 h-1 w-full bg-surface-container rounded-full overflow-hidden">
+            <div
+              className={cn('h-full', tone.progress)}
+              style={{ width: formatConfidence(node.confidence_score) }}
+            ></div>
+          </div>
+        </>
+      )}
     </div>
   )
 }
