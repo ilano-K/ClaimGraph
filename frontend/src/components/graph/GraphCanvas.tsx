@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } 
 import NodeCard from './NodeCard'
 import ConnectionLines from './ConnectionLines'
 import FloatingControls from './FloatingControls'
+import RelationshipFilterDropdown from './RelationshipFilterDropdown'
+import { FILTER_OPTIONS } from '../../lib/relationshipFilter'
+import type { RelationshipFilter } from '../../lib/relationshipFilter'
 import { buildEdgePath, edgeMidpoint, worldBounds } from '../../lib/graphGeometry'
 import { computeSweepLayout } from '../../lib/sweepLayout'
 import { clamp } from '../../lib/utils'
@@ -41,6 +44,8 @@ interface GraphCanvasProps {
   activeNodeId: string | null
   hoveredNodeId: string | null
   refitSignal: number
+  filter: RelationshipFilter
+  onFilterChange: (filter: RelationshipFilter) => void
   onSelectNode: (id: string) => void
   onHoverNode: (id: string | null) => void
   onMoveNode: (nodeId: string, x: number, y: number) => void
@@ -59,6 +64,8 @@ export default function GraphCanvas({
   activeNodeId,
   hoveredNodeId,
   refitSignal,
+  filter,
+  onFilterChange,
   onSelectNode,
   onHoverNode,
   onMoveNode,
@@ -374,6 +381,15 @@ export default function GraphCanvas({
         onToggleFullscreen={toggleFullscreen}
         isFullscreen={isFullscreen}
       />
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20">
+        <RelationshipFilterDropdown value={filter} onChange={onFilterChange} />
+      </div>
+      {filter !== 'all' && nodes.length === 0 && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 glass-panel rounded-lg px-4 py-2 font-label-sm text-on-surface-variant">
+          No {FILTER_OPTIONS.find((option) => option.id === filter)?.label ?? 'matching'}{' '}
+          relationships in this graph
+        </div>
+      )}
     </div>
   )
 }

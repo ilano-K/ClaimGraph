@@ -1,10 +1,11 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import TopNavBar from './components/layout/TopNavBar'
 import GraphCanvas from './components/graph/GraphCanvas'
 import InspectionPanel from './components/inspector/InspectionPanel'
 import OnboardingFlow from './components/onboarding/OnboardingFlow'
 import Dashboard from './components/dashboard/Dashboard'
 import { mapGraphPayload, type MappedGraph } from './lib/mapGraph'
+import { filterGraph, type RelationshipFilter } from './lib/relationshipFilter'
 import { recompileWorkspace } from './api/client'
 import type { CompileResponse, GraphPayload, WorkspaceResponse } from './api/types'
 
@@ -19,10 +20,12 @@ export default function App() {
   const [isRecompiling, setIsRecompiling] = useState(false)
   const [recompileError, setRecompileError] = useState<string | null>(null)
   const [refitSignal, setRefitSignal] = useState(0)
+  const [filter, setFilter] = useState<RelationshipFilter>('all')
 
   const handleGraphCompiled = useCallback((result: CompileResponse) => {
     const mapped = mapGraphPayload(result.graph)
     setGraph(mapped)
+    setFilter('all')
     setActiveNodeId((prev) => prev ?? mapped.nodes[0]?.id ?? null)
   }, [])
 
@@ -64,6 +67,7 @@ export default function App() {
     setWorkspaceId(workspace.id)
     setIsRecompiling(false)
     setRecompileError(null)
+    setFilter('all')
     setScreen('workspace')
   }, [])
 
@@ -71,6 +75,7 @@ export default function App() {
     if (!workspaceId) return
     setIsRecompiling(true)
     setRecompileError(null)
+    setFilter('all')
     try {
       const result = await recompileWorkspace(workspaceId)
       setGraph(mapGraphPayload(result.graph))
@@ -82,6 +87,22 @@ export default function App() {
       setIsRecompiling(false)
     }
   }, [workspaceId])
+
+  const handleFilterChange = useCallback((next: RelationshipFilter) => {
+    setFilter(next)
+    setRefitSignal((n) => n + 1)
+  }, [])
+
+  const visible = useMemo(
+    () => (graph ? filterGraph(graph.nodes, graph.edges, filter) : { nodes: [], edges: [] }),
+    [graph, filter]
+  )
+
+  useEffect(() => {
+    if (!graph || !activeNodeId) return
+    const isActiveVisible = visible.nodes.some((node) => node.id === activeNodeId)
+    if (!isActiveVisible) setActiveNodeId(null)
+  }, [graph, filter, activeNodeId, visible.nodes])
 
   if (screen === 'onboarding') {
     return (
@@ -126,7 +147,7 @@ export default function App() {
   }
 
   const activeNode =
-    graph.nodes.find((node) => node.id === activeNodeId) ?? graph.nodes[0] ?? null
+    graph.nodes.find((node) => node.id === activeNodeId) ?? visible.nodes[0] ?? null
 
   return (
     <div className="text-on-surface font-body-md h-screen overflow-hidden flex flex-col">
@@ -140,11 +161,13 @@ export default function App() {
       />
       <main className="flex-1 relative flex overflow-hidden">
         <GraphCanvas
-          nodes={graph.nodes}
-          edges={graph.edges}
+          nodes={visible.nodes}
+          edges={visible.edges}
           activeNodeId={activeNodeId}
           hoveredNodeId={hoveredNodeId}
           refitSignal={refitSignal}
+          filter={filter}
+          onFilterChange={handleFilterChange}
           onSelectNode={setActiveNodeId}
           onHoverNode={setHoveredNodeId}
           onMoveNode={handleMoveNode}
