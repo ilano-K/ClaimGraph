@@ -4,7 +4,7 @@ import DashboardSidebar from './DashboardSidebar'
 import WorkspaceFilterBar from './WorkspaceFilterBar'
 import WorkspaceCard from './WorkspaceCard'
 import Icon from '../ui/Icon'
-import { listWorkspaces } from '../../api/client'
+import { listWorkspaces, recompileWorkspace } from '../../api/client'
 import { mapWorkspaceResponse } from '../../lib/mapWorkspace'
 import type { WorkspaceResponse } from '../../api/types'
 
@@ -22,6 +22,8 @@ export default function Dashboard({ onNewWorkspace, onOpenWorkspace }: Dashboard
   const [records, setRecords] = useState<WorkspaceResponse[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [recompilingId, setRecompilingId] = useState<string | null>(null)
+  const [recompileErrors, setRecompileErrors] = useState<Record<string, string>>({})
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -35,6 +37,26 @@ export default function Dashboard({ onNewWorkspace, onOpenWorkspace }: Dashboard
       setLoading(false)
     }
   }, [])
+
+  const handleRecompile = useCallback(
+    async (workspaceId: string) => {
+      if (recompilingId) return
+      setRecompilingId(workspaceId)
+      setRecompileErrors((prev) => ({ ...prev, [workspaceId]: '' }))
+      try {
+        await recompileWorkspace(workspaceId)
+        await load()
+      } catch (err) {
+        setRecompileErrors((prev) => ({
+          ...prev,
+          [workspaceId]: err instanceof Error ? err.message : 'Recompile failed.',
+        }))
+      } finally {
+        setRecompilingId(null)
+      }
+    },
+    [load, recompilingId]
+  )
 
   useEffect(() => {
     void load()
@@ -96,6 +118,9 @@ export default function Dashboard({ onNewWorkspace, onOpenWorkspace }: Dashboard
                   key={card.id}
                   workspace={card}
                   onOpen={() => record && onOpenWorkspace(record)}
+                  onRecompile={() => record && handleRecompile(record.id)}
+                  isRecompiling={recompilingId === card.id}
+                  error={recompileErrors[card.id] || null}
                 />
               )
             })}
