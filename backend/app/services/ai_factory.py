@@ -26,6 +26,7 @@ def create_client():
             OpenAI(
                 api_key=settings.llm_api_key,
                 base_url=settings.llm_base_url,
+                default_headers={"User-Agent": "opencode-cli/1.0.0"},
             )
         )
 
@@ -35,3 +36,5 @@ def create_client():
                 api_key=settings.llm_api_key
             )
         )
+    
+    raise ValueError(f"Unsupported LLM provider: {provider}")

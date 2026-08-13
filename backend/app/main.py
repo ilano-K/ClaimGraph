@@ -12,12 +12,16 @@ from app.core.exceptions import AppException
 from contextlib import asynccontextmanager
 from app.db.database import Base, engine
 import logging 
+import sys
 import uvicorn
 
 logging.basicConfig(
-    filename="claim-graph.log",
     level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s"
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    handlers=[
+        logging.FileHandler("claim-graph.log"),
+        logging.StreamHandler(sys.stderr),
+    ]
 )
 
 logger = logging.getLogger(__name__)
@@ -59,4 +63,4 @@ def app_exception_handler(req: Request, exc: AppException):
 
 if __name__ == "__main__":
     logger.info("Starting uvicorn server")
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=True)
