@@ -1,7 +1,7 @@
 /**
- * Static data for the workspace Dashboard. Still fake: there is no backend
- * endpoint to list workspaces yet, so the grid/sidebar/filters render these
- * placeholders. Not part of the /graphs/compile or /workspaces/create wiring.
+ * Dashboard UI chrome: filter/sort options and sidebar navigation. The
+ * workspace grid itself is now loaded live from `GET /api/workspaces/` via
+ * `lib/mapWorkspace.ts` — no fake workspace list lives here.
  */
 
 export interface FilterOption {
@@ -24,7 +24,7 @@ export interface SidebarNavItem {
 export interface WorkspaceMetric {
   label: string
   value: number | null
-  tone?: 'green' | 'red'
+  tone?: 'cyan' | 'green' | 'purple' | 'yellow' | 'amber' | 'red'
 }
 
 export interface WorkspaceSummary {
@@ -33,7 +33,7 @@ export interface WorkspaceSummary {
   title: string
   lastModified: string
   documentLabel: string
-  status: 'ready' | 'processing'
+  status: 'ready' | 'compiling' | 'awaiting' | 'failed'
   metrics: WorkspaceMetric[]
 }
 
@@ -52,33 +52,4 @@ export const sidebarNav: SidebarNavItem[] = [
   { key: 'all', label: 'All Workspaces', icon: 'dashboard', active: true },
   { key: 'http', label: 'HTTP Workspaces', icon: 'language', active: false },
   { key: 'mcp', label: 'MCP Workspaces', icon: 'terminal', active: false },
-]
-
-export const workspaces: WorkspaceSummary[] = [
-  {
-    id: 'ws-consensus',
-    ingress: 'HTTP',
-    title: 'Distributed Consensus Analysis',
-    lastModified: '2 hours ago',
-    documentLabel: '3 RFCs uploaded',
-    status: 'ready',
-    metrics: [
-      { label: 'Core Claims', value: 12 },
-      { label: 'Empirical Evidence', value: 45, tone: 'green' },
-      { label: 'Red Trade-Offs', value: 8, tone: 'red' },
-    ],
-  },
-  {
-    id: 'ws-neural',
-    ingress: 'MCP',
-    title: 'Neural-Net-Lit-Review',
-    lastModified: 'Just now',
-    documentLabel: '5 PDFs uploaded',
-    status: 'processing',
-    metrics: [
-      { label: 'Core Claims', value: null },
-      { label: 'Empirical Evidence', value: null },
-      { label: 'Trade-Offs', value: null },
-    ],
-  },
 ]
