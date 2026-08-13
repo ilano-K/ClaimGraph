@@ -93,6 +93,13 @@ body {
   animation: edge-pulse 4s ease-in-out infinite;
 }
 
+/* The pulse animation animates opacity, which overrides the dimmed edge's
+   static opacity. Stop the animation so dimmed LIMITS edges fade like all
+   other edges. */
+.edge-limits.dimmed {
+  animation: none;
+}
+
 .edge-causes {
   stroke-width: 3;
   stroke-dasharray: none;
