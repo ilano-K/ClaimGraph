@@ -10,12 +10,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "dagre": "^0.8.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@tailwindcss/container-queries": "^0.1.1",
     "@tailwindcss/forms": "^0.5.10",
+    "@types/dagre": "^0.7.54",
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^4.3.4",

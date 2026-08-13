@@ -1,3 +1,4 @@
+import { computeSweepLayout } from './sweepLayout'
 import type {
   DocumentAnalysis,
   GraphEdgeView,
@@ -8,18 +9,25 @@ import type {
   WorkspaceMetadata,
 } from '../api/types'
 
+const DEFAULT_CARD_WIDTH = 256
+const DEFAULT_CARD_HEIGHT = 168
+
 const NODE_CATEGORY_TONES: Record<NodeCategory, NodeTone> = {
-  claim: 'blue',
+  claim: 'cyan',
   evidence: 'green',
-  tradeoff: 'red',
   methodology: 'purple',
+  limitation: 'yellow',
+  risk: 'amber',
+  consequence: 'red',
 }
 
 const NODE_CATEGORY_LABELS: Record<NodeCategory, string> = {
   claim: 'CLAIM',
   evidence: 'EVIDENCE',
-  tradeoff: 'TRADEOFF',
   methodology: 'METHODOLOGY',
+  limitation: 'LIMITATION',
+  risk: 'RISK',
+  consequence: 'CONSEQUENCE',
 }
 
 export interface MappedGraph {
@@ -29,18 +37,10 @@ export interface MappedGraph {
 }
 
 /**
- * Deterministic starting layout. The backend returns no coordinates, so nodes
- * are arranged on a grid; they remain draggable once rendered.
+ * Deterministic starting layout. The backend returns no coordinates, so a
+ * layered left-to-right flow is computed up front with `computeSweepLayout`
+ * (dagre); nodes remain draggable once rendered and can be re-swept.
  */
-function layoutPosition(count: number, index: number): { x: number; y: number } {
-  const spacing = 340
-  const columns = Math.max(1, Math.ceil(Math.sqrt(count)))
-  return {
-    x: 80 + (index % columns) * spacing,
-    y: 80 + Math.floor(index / columns) * spacing,
-  }
-}
-
 function findDocument(documents: DocumentAnalysis[], documentId: string) {
   return documents.find((doc) => doc.metadata.id === documentId)
 }
@@ -52,11 +52,22 @@ function findDocument(documents: DocumentAnalysis[], documentId: string) {
  * no backend source yet (`thread`) are left empty.
  */
 export function mapGraphPayload(payload: GraphPayload): MappedGraph {
-  const nodes: GraphNodeView[] = payload.nodes.map((node, index) => {
+  const positions = computeSweepLayout(
+    payload.nodes.map((node) => ({
+      id: node.id,
+      width: DEFAULT_CARD_WIDTH,
+      height: DEFAULT_CARD_HEIGHT,
+    })),
+    payload.edges.map((edge) => ({ source: edge.source, target: edge.target }))
+  )
+
+  const nodes: GraphNodeView[] = payload.nodes.map((node) => {
     const document = findDocument(payload.documents, node.document_id)
-    const tone = NODE_CATEGORY_TONES[node.node_category] ?? 'blue'
+    const tone = NODE_CATEGORY_TONES[node.node_category] ?? 'cyan'
     const badgeLabel = NODE_CATEGORY_LABELS[node.node_category] ?? 'CLAIM'
-    const { x, y } = layoutPosition(payload.nodes.length, index)
+    const pos = positions.get(node.id)
+    const x = pos?.x ?? 0
+    const y = pos?.y ?? 0
     const sourceTitle = document?.metadata.title ?? 'Verbatim source'
 
     return {

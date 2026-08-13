@@ -11,11 +11,6 @@ export const NODE_TONES: Record<NodeTone, { badge: string; progress: string; car
     progress: 'bg-red-500',
     card: 'node-red',
   },
-  blue: {
-    badge: 'bg-blue-500/10 border border-blue-500 text-blue-400',
-    progress: 'bg-blue-500',
-    card: 'node-blue',
-  },
   green: {
     badge: 'bg-emerald-500/10 border border-emerald-500 text-emerald-400',
     progress: 'bg-emerald-500',
@@ -26,4 +21,32 @@ export const NODE_TONES: Record<NodeTone, { badge: string; progress: string; car
     progress: 'bg-purple-500',
     card: 'node-purple',
   },
+  cyan: {
+    badge: 'bg-cyan-500/10 border border-cyan-500 text-cyan-400',
+    progress: 'bg-cyan-500',
+    card: 'node-cyan',
+  },
+  yellow: {
+    badge: 'bg-yellow-500/10 border border-yellow-500 text-yellow-400',
+    progress: 'bg-yellow-500',
+    card: 'node-yellow',
+  },
+  amber: {
+    badge: 'bg-amber-500/10 border border-amber-500 text-amber-400',
+    progress: 'bg-amber-500',
+    card: 'node-amber',
+  },
+}
+
+/**
+ * Solid accent hex per tone, matching the node card border. Used to color
+ * SUPPORTS edges so they match their source node.
+ */
+export const NODE_ACCENT: Record<NodeTone, string> = {
+  red: '#EF4444',
+  green: '#10B981',
+  purple: '#8B5CF6',
+  cyan: '#22D3EE',
+  yellow: '#EAB308',
+  amber: '#F59E0B',
 }

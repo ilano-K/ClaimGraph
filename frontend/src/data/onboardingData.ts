@@ -35,6 +35,6 @@ export const welcomeFeatures: WelcomeFeature[] = [
     icon: 'psychology',
     accent: 'tertiary',
     title: 'AI Interrogation',
-    description: 'Chat directly with your data to uncover hidden trade-offs.',
+    description: 'Chat directly with your data to uncover limitations, risks, and consequences.',
   },
 ]

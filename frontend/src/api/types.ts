@@ -3,9 +3,15 @@
  * view models built from them (namespaced `presentation.*` fields).
  */
 
-export type NodeCategory = 'claim' | 'evidence' | 'tradeoff' | 'methodology'
-export type EdgeRelation = 'supports' | 'limits' | 'depends_on'
-export type NodeTone = 'red' | 'blue' | 'green' | 'purple'
+export type NodeCategory =
+  | 'claim'
+  | 'evidence'
+  | 'methodology'
+  | 'limitation'
+  | 'risk'
+  | 'consequence'
+export type EdgeRelation = 'supports' | 'limits' | 'causes' | 'challenges'
+export type NodeTone = 'cyan' | 'green' | 'purple' | 'yellow' | 'amber' | 'red'
 
 export interface DocumentMetadata {
   id: string
