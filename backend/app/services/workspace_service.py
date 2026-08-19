@@ -29,7 +29,7 @@ from pathlib import Path
 from app.services.graph_service import generate_claim_graph
 from app.schemas.graph import GraphNode, GraphEdge
 from app.schemas.graph import GraphPayload
-from app.services.graph_service import to_react_flow_edges, to_react_flow_nodes
+from app.services.reactflow import to_react_flow_edges, to_react_flow_nodes
 from app.services.text_cleanup import normalize_graph_payload
 from sqlalchemy.exc import SQLAlchemyError
 import logging
