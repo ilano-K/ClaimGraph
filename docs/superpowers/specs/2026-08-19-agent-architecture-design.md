@@ -77,13 +77,14 @@ backend/app/agents/
 Single function:
 
 ```
-chat_structured(system: str, messages: list, response_model: type[T],
-                tool_schemas: list | None = None, **kwargs) -> T
+chat_structured(system: str, messages: list, response_model: type[T], **kwargs) -> T
 ```
 
 Responsibilities:
-- Build the request: system message + messages; attach `response_model` and, for
-  the agent, tool/function schemas.
+- Build the request: system message + messages; attach `response_model` (a
+  Pydantic model, or a discriminated union for agent decisions — the agent
+  does not use native tool schemas; its decision loop models "answer or tool
+  call" as a union type).
 - Provider-specific options are forwarded via `**kwargs` (e.g. the existing
   Gemini `extra_body={"thinking": {"type": "disabled"}}` used by graph
   extraction).
