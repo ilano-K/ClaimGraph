@@ -42,15 +42,18 @@ backend/app/agents/
 
 ### Files modified
 
-- `backend/app/services/ai_factory.py` -> becomes `app/llm/client_factory.py`
-  (or remains as a thin re-export). Caches the client as a singleton; keeps the
-  existing `openai` and `google` branches, openai-compatible first.
+- `backend/app/services/ai_factory.py` -> logic moves to
+  `app/llm/client_factory.py` as `get_client()`. `ai_factory.py` becomes a thin
+  re-export of `get_client` so existing imports keep working. Caches the client
+  as a singleton; keeps the existing `openai` and `google` branches,
+  openai-compatible first.
 - `backend/app/services/graph_service.py` -> `generate_claim_graph` calls
   `chat_structured` instead of raw `client.chat.completions.create`. React Flow
   mapping moves out.
 - `backend/app/services/reactflow.py` -> NEW: `to_react_flow_nodes` and
   `to_react_flow_edges` moved here from `graph_service`.
-- `backend/app/api/routes/workspaces.py` -> NEW agent route: SSE chat endpoint.
+- `backend/app/api/routes/agents.py` -> NEW router: SSE chat endpoint.
+- `backend/app/main.py` -> register the new agents router.
 - `backend/app/core/settings.py` -> add `llm_max_retries`, `llm_timeout`
   (optional, with defaults).
 - Tests migrate their `monkeypatch.setattr(graph_service, "create_client", ...)`
@@ -81,6 +84,9 @@ chat_structured(system: str, messages: list, response_model: type[T],
 Responsibilities:
 - Build the request: system message + messages; attach `response_model` and, for
   the agent, tool/function schemas.
+- Provider-specific options are forwarded via `**kwargs` (e.g. the existing
+  Gemini `extra_body={"thinking": {"type": "disabled"}}` used by graph
+  extraction).
 - Retries and timeout using `llm_max_retries` / `llm_timeout`.
 - Maps provider/schema failures to `InvalidLLMResponseError` (and timeout /
   retry-exhausted variants if needed).
@@ -137,7 +143,7 @@ Six tools:
 
 ### Route
 
-New endpoint in `workspaces.py` (or an `agents.py` router):
+New router in `backend/app/api/routes/agents.py`, registered in `app/main.py`:
 
 ```
 POST /api/workspaces/{workspace_id}/chat   -> SSE stream
