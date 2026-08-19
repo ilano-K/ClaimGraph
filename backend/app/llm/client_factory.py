@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 
 _client = None
 
+DEFAULT_MODEL = "openrouter/free"
+
 
 def get_client():
     """Return the cached Instructor client for the configured LLM provider.
@@ -26,7 +28,7 @@ def get_client():
     if _client is not None:
         return _client
 
-    logger.info("create_client model=%s", settings.llm_model_name)
+    logger.info("create_client model=%s", DEFAULT_MODEL)
     _client = instructor.from_openai(
         OpenAI(
             api_key=settings.llm_api_key,

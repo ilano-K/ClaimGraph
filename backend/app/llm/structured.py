@@ -9,8 +9,7 @@ from typing import Type, TypeVar
 from instructor.exceptions import IncompleteOutputException
 
 from app.core.exceptions import InvalidLLMResponseError
-from app.core.settings import settings
-from app.llm.client_factory import get_client
+from app.llm.client_factory import DEFAULT_MODEL, get_client
 import logging
 import time
 
@@ -34,12 +33,12 @@ def chat_structured(
     start = time.perf_counter()
     logger.info(
         "chat_structured entry model=%s",
-        settings.llm_model_name,
+        DEFAULT_MODEL,
     )
     client = get_client()
     try:
         result = client.chat.completions.create(
-            model=settings.llm_model_name,
+            model=DEFAULT_MODEL,
             response_model=response_model,
             messages=[{"role": "system", "content": system}, *messages],
             **kwargs,

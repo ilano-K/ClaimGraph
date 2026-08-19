@@ -5,7 +5,7 @@ then fails loudly if any input document is missing from the response (so the
 result can always be quote-validated downstream).
 """
 from app.llm.structured import chat_structured
-from app.core.settings import settings
+from app.llm.client_factory import DEFAULT_MODEL
 from app.schemas.graph import GraphPayload
 from app.prompts.claim_graph import SYSTEM_PROMPT
 from app.core.exceptions import InvalidLLMResponseError
@@ -28,7 +28,7 @@ def generate_claim_graph(documents) -> GraphPayload:
     start = time.perf_counter()
     logger.info(
         "generate_claim_graph entry model=%s documents=%d",
-        settings.llm_model_name,
+        DEFAULT_MODEL,
         len(documents),
     )
 
