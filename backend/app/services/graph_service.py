@@ -5,7 +5,7 @@ file to Markdown, asks the LLM for a structured graph, drops any nodes whose
 quotes are not verbatim in their source document, and converts the result
 into React Flow-ready payloads.
 """
-from app.services.ai_factory import create_client
+from app.llm.structured import chat_structured
 from app.core.settings import settings
 from app.schemas.graph import GraphPayload
 from app.schemas.node import GraphNode, GraphEdge
@@ -83,21 +83,15 @@ def generate_claim_graph(documents) -> GraphPayload:
         len(documents),
     )
 
-    client = create_client()
-
-    result = client.chat.completions.create(
-        model=settings.llm_model_name,
-        response_model=GraphPayload,
+    result = chat_structured(
+        system=SYSTEM_PROMPT,
         messages=[
-            {
-                "role": "system",
-                "content": SYSTEM_PROMPT,
-            },
             {
                 "role": "user",
                 "content": json.dumps(documents, ensure_ascii=False),
-            },
+            }
         ],
+        response_model=GraphPayload,
         extra_body={"thinking": {"type": "disabled"}},
     )
 
