@@ -5,24 +5,33 @@
 Introduce a chat agent ("ClaimGraph Assistant") into the FastAPI backend that can
 answer questions about a workspace's papers, verify that claims have verbatim
 sources, edit the graph canvas (persisted to the database), and trigger
-recompilation. Alongside it, extract a thin LLM service layer so the existing
-graph-extraction pipeline and the new agent share one integration point instead
-of each re-implementing provider calls.
+recompilation. The agent loop is built on **LangGraph** (LangChain's agent
+framework); the existing graph-extraction pipeline stays on Instructor with a
+thin `app/llm/` service layer shared by nothing else in the agent path.
 
 The agent stays in **Python** on the backend (its tools require docling-parsed
 content, quote validation, and database persistence that already live there).
-No LangChain/LangGraph, no Vercel AI SDK on the backend. The frontend consumes
-an SSE stream and may use the AI SDK's `useChat` for UI ergonomics.
+The frontend consumes an SSE stream and may use the AI SDK's `useChat` for UI
+ergonomics. There is no Vercel AI SDK on the backend.
 
 ## Approach
 
-Build a thin own-layer with swap seams ("Approach A shaped like C"): a small
-`app/llm/` package for provider construction and structured calls, and an
-`app/agents/` package for the tool registry and async agent loop. The agent
-loop is a bounded while-loop over one `chat_structured` call per iteration,
-emitting typed stream events for SSE. No framework dependency; the `Tool` and
-`AgentStreamEvent` interfaces are the seams where LangGraph could be swapped in
-later without touching routes or tools.
+Two integration points, chosen deliberately:
+
+1. **Graph extraction (existing pipeline)** — refactored onto a thin
+   `app/llm/` layer (`client_factory.py` cached client + `structured.py`
+   `chat_structured`) using Instructor, exactly as today. This pipeline is
+   stable and green; it is NOT migrated to LangChain.
+2. **Agent (new)** — built on LangGraph: a `StateGraph` with an `agent` node
+   (provider model `bind_tools`) and a `tools` node, connected by LangGraph's
+   `tools_condition`. The framework runs the loop, dispatches tools, handles
+   tool errors, and streams events via `astream_events(version="v2")`. A thin
+   `run_agent` wrapper translates LangChain's event stream into typed ClaimGraph
+   SSE events (`text_delta | tool_call | tool_result | error | done`), so the
+   HTTP route and frontend never see LangChain types.
+
+The graph-compile behavior must remain byte-for-byte identical after the
+extraction refactor.
 
 ## Scope
 
@@ -36,8 +45,9 @@ backend/app/llm/
 
 backend/app/agents/
   __init__.py
-  tools.py                # tool registry: name -> {input schema, description, callable}
-  simple_agent.py         # async loop; async generator of AgentStreamEvent
+  events.py               # AgentStreamEvent dataclasses + event_to_dict
+  tools.py                # build_tools(db, workspace_id) -> list[StructuredTool]; pure mutation logic
+  graph.py                # build_model(), build_agent(tools, model=None), run_agent(agent, message)
 ```
 
 ### Files modified
@@ -53,13 +63,15 @@ backend/app/agents/
 - `backend/app/services/reactflow.py` -> NEW: `to_react_flow_nodes` and
   `to_react_flow_edges` moved here from `graph_service`.
 - `backend/app/api/routes/agents.py` -> NEW router: SSE chat endpoint.
-- `backend/app/main.py` -> register the new agents router.
+- `backend/app/api/routes/__init__.py` -> register the new agents router.
 - `backend/app/core/settings.py` -> add `llm_max_retries`, `llm_timeout`
   (optional, with defaults).
+- `backend/requirements.txt` -> add `langgraph`, `langchain-openai`,
+  `langchain-google-genai`.
 - Tests migrate their `monkeypatch.setattr(graph_service, "create_client", ...)`
   seams to the LLM layer.
 
-## LLM service layer (`app/llm`)
+## LLM service layer (`app/llm`) — extraction only
 
 ### `client_factory.py`
 
@@ -69,7 +81,7 @@ backend/app/agents/
   OpenAI, Groq, Mistral, Together, DeepSeek, OpenRouter, Ollama, Azure, and
   Gemini's OpenAI-compatible endpoint. No code change needed to add these.
 - Keeps the existing `google` (native GenAI SDK) branch as an adapter escape
-  hatch. Anthropic adapter is deferred until needed.
+  hatch.
 - Raises `ValueError` for an unrecognized provider (existing behavior).
 
 ### `structured.py`
@@ -81,10 +93,7 @@ chat_structured(system: str, messages: list, response_model: type[T], **kwargs) 
 ```
 
 Responsibilities:
-- Build the request: system message + messages; attach `response_model` (a
-  Pydantic model, or a discriminated union for agent decisions — the agent
-  does not use native tool schemas; its decision loop models "answer or tool
-  call" as a union type).
+- Build the request: system message + messages; attach `response_model`.
 - Provider-specific options are forwarded via `**kwargs` (e.g. the existing
   Gemini `extra_body={"thinking": {"type": "disabled"}}` used by graph
   extraction).
@@ -94,114 +103,132 @@ Responsibilities:
 - Logs entry/exit with provider, model, duration, and result shape — same style
   as today. Never logs the API key.
 
-This is the ONLY place outside `app/llm/` that touches the provider SDK.
+This is the ONLY place in the extraction path that touches the provider SDK.
 
-## Agent (`app/agents`)
+## Agent (`app/agents`) — LangGraph
 
-### Tools (`tools.py`)
+### `events.py`
 
-Tool = name + Pydantic input schema + description + plain async callable.
-Registry maps name -> tool. Pydantic model doubles as the JSON schema.
+Typed event dataclasses shared by the SSE transport:
+`TextDeltaEvent`, `ToolCallEvent`, `ToolResultEvent`, `ErrorEvent`,
+`DoneEvent`, each carrying a `type` literal, plus `event_to_dict(event)`
+which adds the `"type"` field for SSE serialization.
 
-Six tools:
+### `tools.py`
 
-1. `get_workspace_graph(workspace_id)` — full compiled graph (nodes, edges,
-   relation reasoning, per-document summaries).
-2. `get_workspace_documents(workspace_id)` — document list + metadata.
-3. `get_document_chunks(workspace_id, document_id)` — semantic chunks of one
-   source document (uses the existing docling `HybridChunker` in `parsers.py`).
-4. `verify_graph(workspace_id)` — deterministic re-run of the existing
-   quote-validation logic (`validate_document_quotes`); returns per-node
-   pass/fail with the offending quote. No LLM cost.
-5. `edit_workspace_graph(workspace_id, mutation)` — validated, persisted graph
-   mutation. Enforces:
-   - Pydantic schema (`GraphPayload` shape),
-   - referential integrity (no edges to missing nodes; deleting a node removes
-     its edges),
-   - the relation matrix (`SUPPORTS`/`LIMITS`/`CAUSES`/`CHALLENGES`
-     source->target category rules from the graph prompt),
-   then persists `workspace.graph_payload` and the frontend re-renders from the
-   DB payload.
-6. `recompile_workspace(workspace_id)` — re-runs the full pipeline
-   (parse -> LLM -> validate). Its tool description states it is slow and
-   state-changing so the model uses it sparingly.
+Six LangChain `StructuredTool`s built by `build_tools(db, workspace_id)`,
+closure-bound to the request's db session and workspace id so the LLM never
+sees or supplies either:
 
-### Agent loop (`simple_agent.py`)
+1. `get_workspace_graph` — full compiled graph JSON.
+2. `get_workspace_documents` — document list + metadata.
+3. `get_document_chunks(document_id)` — semantic chunks of one source document
+   (uses the existing docling `HybridChunker`).
+4. `verify_graph` — deterministic re-run of the existing quote-validation
+   (`validate_document_quotes`); returns checked/verified counts and the node
+   ids whose quotes could not be found verbatim. No LLM cost.
+5. `edit_workspace_graph(mutation)` — validated, persisted graph mutation
+   (`add_nodes` / `remove_node_ids` / `add_edges` / `remove_edge_ids`).
+   Enforces referential integrity and the relation matrix; on success persists
+   `workspace.graph_payload` and the frontend re-renders.
+6. `recompile_workspace` — re-runs parse -> LLM -> validate. Its description
+   states it is slow and state-changing.
 
-- Async generator yielding typed events:
-  `text_delta | tool_call | tool_result | error | done`.
-- Loop, bounded at ~10 iterations:
-  1. Compose messages: agent system prompt + accumulated history + tool schemas.
-  2. `chat_structured` -> either a final answer (streamed as `text_delta`) or a
-     tool call.
-  3. Tool call -> emit `tool_call`, dispatch via the registry inside
-     try/except, append the result as a message, loop.
-  4. Final answer -> emit `done`.
-- Tool exceptions are caught per-tool and returned to the model as a tool result
-  message (non-fatal). Exceeding the iteration cap emits `error` and stops.
-- Stateless per request; conversation history is held by the caller (the route)
-  and passed in. No persistence.
+Pure, unit-testable logic lives module-level: `GraphMutation`,
+`ALLOWED_RELATIONS` (the connection matrix from the graph prompt),
+`apply_graph_mutation(payload, mutation)`.
+
+### `graph.py`
+
+- `build_model()` — provider-aware chat model: `ChatOpenAI` (OpenAI-compatible
+  `base_url`) for `llm_provider == "openai"`, `ChatGoogleGenerativeAI` for
+  `"google"`.
+- `build_agent(tools, model=None)` — compiles the LangGraph ReAct graph:
+  `agent` node (model `bind_tools`) -> `tools` node via `tools_condition` ->
+  back to `agent`; the loop is bounded by LangGraph's `recursion_limit`
+  (default 25, ~12 tool calls).
+- `run_agent(agent, user_message)` — async generator over
+  `agent.astream_events(..., version="v2")` that maps LangChain events to the
+  ClaimGraph SSE events:
+  - `on_chat_model_stream` -> `TextDeltaEvent` (token deltas; skips empty
+    tool-call chunks),
+  - `on_tool_start` -> `ToolCallEvent`,
+  - `on_tool_end` -> `ToolResultEvent`,
+  - `on_tool_error` / `on_chain_error` -> `ToolResultEvent` / `ErrorEvent`,
+  - then `DoneEvent`.
+- Stateless per request: no checkpointer; message history lives inside the
+  single LangGraph run and is discarded after.
 
 ### Route
 
-New router in `backend/app/api/routes/agents.py`, registered in `app/main.py`:
+New router in `backend/app/api/routes/agents.py`, registered in
+`app/api/routes/__init__.py`:
 
 ```
 POST /api/workspaces/{workspace_id}/chat   -> SSE stream
 ```
 
-- Reads the user message, creates a fresh agent over the workspace, streams the
-  agent's async generator as `text/event-stream`.
+- Body: `{"message": string}`.
+- Verifies the workspace exists (404 `WorkspaceNotFoundError` otherwise),
+  builds tools + agent, and streams `run_agent` output as `text/event-stream`.
 - Returns 404 `WorkspaceNotFoundError` if the workspace does not exist.
 
 ## Data flow
 
 1. Frontend POSTs a message to the chat endpoint.
-2. Route builds a `SimpleAgent` bound to the workspace and a message history.
-3. Agent calls `chat_structured`; the LLM returns a final answer or a tool call.
-4. Tool calls dispatch to registry tools (which read/validate/persist via the
-   existing services and DB).
-5. Agent streams typed events to the route; route encodes them as SSE.
-6. Frontend renders text and applies any graph edits by re-fetching the
-   workspace payload.
+2. Route verifies the workspace, calls `build_tools(db, workspace_id)`, and
+   compiles the LangGraph agent.
+3. `run_agent` invokes `astream_events`; the agent node calls the model, which
+   returns tool calls or text; `tools_condition` routes tool calls to the tools
+   node (which dispatch to the six tools) and text to END.
+4. The wrapper maps each LangChain event to a ClaimGraph SSE event; the route
+   encodes them as `data: {json}\n\n`.
+5. Frontend renders text and, after `edit_workspace_graph`/`recompile_workspace`
+   tool results, re-fetches the workspace payload.
 
 ## Error handling and observability
 
-- All LLM failures surface through `structured.py` as
+- LangGraph's `ToolNode` catches tool exceptions (returns them as tool
+  messages); the wrapper also maps `on_tool_error`/`on_chain_error` to
+  `ToolResultEvent`/`ErrorEvent` so the stream always ends with `DoneEvent`.
+- The LLM extraction path still surfaces failures through `structured.py` as
   `InvalidLLMResponseError` (plus timeout/retry variants).
-- Per-tool errors become tool-result messages, not request failures.
-- Agent loop logs entry/exit, iteration count, tool invocations, and duration.
 - Existing per-step INFO/ERROR logging style is preserved; API key never logged.
 
 ## Testing
 
 - `chat_structured` unit-tested with a fake client (existing monkeypatch
   pattern).
-- Agent loop tested with a scripted fake LLM: returns a tool call then a final
-  answer; assert the emitted event sequence (`tool_call` -> `tool_result` ->
-  `text_delta` -> `done`).
-- Tool tests: `verify_graph` with a document whose node quote is not verbatim;
-  `edit_workspace_graph` rejects a dangling edge and a relation-matrix
-  violation; `recompile_workspace` reuses existing compile coverage.
-- SSE route tested via TestClient, matching the existing API-test style.
+- `events.py` tested for `event_to_dict` serialization.
+- `tools.py`: `apply_graph_mutation` rejects dangling edges, relation-matrix
+  violations, and duplicate ids; `build_tools` returns exactly the six tools;
+  tool behavior tested through `StructuredTool.ainvoke` against a real SQLite
+  session (graph read, verify flagging a non-verbatim quote, edit persisting,
+  recompile invoking the service).
+- `graph.py`: `run_agent` event mapping tested against a fake agent yielding
+  scripted LangChain events; `build_agent` compiled and run end-to-end with a
+  scripted fake model (returns one tool call then a final answer) — no real LLM.
+- SSE route tested via TestClient (patch `run_agent`).
 - Migrate existing tests that patch `graph_service.create_client` to patch the
   LLM layer (`app.llm.structured.chat_structured` or the client factory).
 
 ## Constraints
 
-- No new runtime dependencies. Instructor, OpenAI/GenAI SDKs, Pydantic are
-  already in use.
-- No provider knowledge leaks above `app/llm/`.
-- Never log secrets (LLM API key).
-- Keep the existing graph-compile behavior identical; the refactor must not
-  change the compiled payload or quote-validation semantics.
-- Agent stays in Python on the backend.
+- **New runtime dependencies (agent only):** `langgraph`, `langchain-openai`,
+  `langchain-google-genai`. No other new dependencies. Instructor remains for
+  the extraction path.
+- **No provider knowledge leaks above `app/llm/` (extraction) and
+  `app/agents/graph.py` (agent).**
+- **Never log secrets** — the LLM API key must never be logged.
+- **Keep the existing graph-compile behavior identical; the extraction refactor
+  must not change the compiled payload or quote-validation semantics.**
+- **Agent stays in Python** on the backend.
 
 ## Out of scope (deferred)
 
-- Conversation persistence (a `ChatMessage` table / load-save around the agent).
+- Conversation persistence (a `ChatMessage` table / load-save around the agent;
+  LangGraph checkpointer if ever needed).
 - Semantic `search_documents` tool over chunks.
-- LangGraph, checkpointing, human-in-the-loop, sub-agents, multi-model routing.
-- Native Anthropic adapter (only if the OpenAI-compatible path proves
-  insufficient).
+- Migrating graph extraction off Instructor to LangChain.
+- Human-in-the-loop, sub-agents, multi-model routing.
 - Changing the frontend beyond SSE consumption and re-fetch on graph edits.

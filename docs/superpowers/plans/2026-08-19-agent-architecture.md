@@ -1,19 +1,19 @@
-# Agent Architecture Implementation Plan
+# Agent Architecture Implementation Plan (LangGraph)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a "ClaimGraph Assistant" chat agent to the FastAPI backend (read/verify/edit/recompile the workspace graph over SSE) and extract a thin LLM layer shared by the existing graph pipeline and the agent.
+**Goal:** Add a "ClaimGraph Assistant" chat agent to the FastAPI backend (read/verify/edit/recompile the workspace graph over SSE) built on LangGraph, plus a thin LLM layer for the existing graph-extraction pipeline.
 
-**Architecture:** A thin own-layer with swap seams. `app/llm/` holds the cached client factory (`client_factory.py`) and the single structured-call function (`structured.py`). `app/agents/` holds a tool registry (`tools.py`) and a bounded async agent loop (`simple_agent.py`) that streams typed events to an SSE route. The existing `graph_service.generate_claim_graph` is refactored onto `chat_structured`, and the React Flow mapping moves into `app/services/reactflow.py`.
+**Architecture:** Two deliberate integration points. The existing extraction pipeline is refactored onto `app/llm/` (`client_factory.py` cached Instructor client + `structured.py` `chat_structured`) and stays on Instructor. The agent is a LangGraph `StateGraph` (agent node `bind_tools` + tools node via `tools_condition`); `app/agents/graph.py` translates `astream_events(version="v2")` into typed ClaimGraph SSE events so the route and frontend never see LangChain types. The six tools live in `app/agents/tools.py` as `StructuredTool`s bound to the request's db + workspace.
 
-**Tech Stack:** Python 3 (FastAPI, SQLAlchemy/SQLite), Instructor + OpenAI/Google GenAI SDKs, Pydantic v2, pytest, React 18 (frontend task only).
+**Tech Stack:** Python 3 (FastAPI, SQLAlchemy/SQLite), LangGraph + langchain-openai/langchain-google-genai (agent), Instructor + OpenAI/Google GenAI SDKs (extraction), Pydantic v2, pytest, React 18 (frontend task only).
 
 ## Global Constraints
 
-- **No new runtime dependencies.** Instructor, OpenAI SDK, Google GenAI SDK, Pydantic are already installed.
-- **No provider knowledge leaks above `app/llm/`.** Only `client_factory.py` and `structured.py` may import the OpenAI/GenAI SDKs or Instructor.
+- **New runtime dependencies (agent only):** `langgraph`, `langchain-openai`, `langchain-google-genai`. No other new dependencies. Instructor remains for extraction.
+- **No provider knowledge leaks** above `app/llm/` (extraction) and `app/agents/graph.py` (agent).
 - **Never log secrets** — the LLM API key must never be logged.
-- **Keep the existing graph-compile behavior identical.** The refactor must not change the compiled payload or quote-validation semantics.
+- **Keep the existing graph-compile behavior identical.** The extraction refactor must not change the compiled payload or quote-validation semantics.
 - **Agent stays in Python** on the backend.
 - **Tests run from `backend/`:** `pytest tests/<file>.py -q`. `conftest.py` seeds `LLM_PROVIDER=openai`, `LLM_API_KEY=test-key`, `LLM_MODEL_NAME=test-model` before any `app.*` import.
 - **Do not revert uncommitted working-tree changes** in `backend/app/services/ai_factory.py` (provider branch is `google`, not `gemini`) or `frontend/src/components/dashboard/Dashboard.tsx`.
@@ -28,14 +28,14 @@ Work in this order. Each phase produces a green, independently testable state.
 | Phase | Tasks | What you get | Why this order |
 |-------|-------|--------------|----------------|
 | 0. Stabilize | Task 0 | Green test baseline | Stale fixtures block TDD red/green verification everywhere else |
-| 1. LLM foundation | Tasks 1–2 | `app/llm/` (cached client + `chat_structured`) | Everything below depends on this layer |
-| 2. Prove the layer | Tasks 3–4 | `graph_service` refactored onto `chat_structured`; reactflow mapping extracted | Validates the abstraction against the existing pipeline and migrates its tests before building on top |
-| 3. Tools | Tasks 5–8 | Tool registry + the six tools | The agent loop dispatches to these; nothing above them until they exist |
-| 4. Agent loop | Task 9 | `simple_agent.py` stream | Consumes the tools |
-| 5. API | Task 10 | SSE chat endpoint | Consumes the agent; the feature becomes callable end-to-end |
-| 6. Frontend | Task 11 (optional) | SSE chat client + component | Consumes the endpoint; deferred per spec |
+| 1. Extraction LLM layer | Tasks 1–2 | `app/llm/` (cached client + `chat_structured`) | The extraction refactor's foundation |
+| 2. Prove the layer | Tasks 3–4 | `graph_service` refactored onto `chat_structured`; reactflow mapping extracted | Validates the extraction refactor and migrates its tests before agent work starts |
+| 3. Agent events + tools | Tasks 5–6 | `events.py` + `tools.py` (six `StructuredTool`s + pure mutation logic) | The LangGraph agent dispatches to these |
+| 4. LangGraph agent | Task 7 | `graph.py` (model factory + compiled StateGraph + `run_agent` SSE wrapper) | The agent loop itself |
+| 5. API | Task 8 | SSE chat endpoint | Consumes the agent; the feature becomes callable end-to-end |
+| 6. Frontend | Task 9 (optional) | SSE chat client + component | Consumes the endpoint; deferred per spec |
 
-Start with **Task 0**, then work top to bottom. Tasks 1–10 are required; Task 11 is optional and can be deferred.
+Start with **Task 0**, then work top to bottom. Tasks 0–8 are required; Task 9 is optional and can be deferred.
 
 ---
 
@@ -226,7 +226,7 @@ git commit -m "feat(llm): add cached client factory with timeout setting"
 
 **Interfaces:**
 - Consumes: `get_client()` from Task 1, `InvalidLLMResponseError`, `settings.llm_max_retries`.
-- Produces: `chat_structured(system: str, messages: list[dict], response_model: type[T], **kwargs) -> T`. This is the ONLY function in the codebase that calls the provider. Callers pass plain `{"role", "content"}` dicts (no system message) and provider-specific options via `**kwargs` (e.g. `extra_body={"thinking": {"type": "disabled"}}`).
+- Produces: `chat_structured(system: str, messages: list[dict], response_model: type[T], **kwargs) -> T`. This is the ONLY function in the extraction path that calls the provider. Callers pass plain `{"role", "content"}` dicts (no system message) and provider-specific options via `**kwargs` (e.g. `extra_body={"thinking": {"type": "disabled"}}`).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -332,9 +332,9 @@ In `backend/app/core/settings.py`, add inside the `Settings` class:
 `backend/app/llm/structured.py`:
 
 ```python
-"""Structured LLM call layer.
+"""Structured LLM call layer (graph-extraction path).
 
-The single integration point between app services / agents and the LLM
+The single integration point between the extraction pipeline and the LLM
 provider. Hides the client, request assembly, retries, and error mapping so
 callers never touch the provider SDK.
 """
@@ -645,22 +645,158 @@ git commit -m "refactor(graph): extract react flow mapping into app/services/rea
 
 ---
 
-### Task 5: Tool registry and read tools
+### Task 5: Agent stream events (`app/agents/events.py`)
 
 **Files:**
 - Create: `backend/app/agents/__init__.py`
-- Create: `backend/app/agents/tools.py`
-- Create: `backend/tests/test_tools.py`
+- Create: `backend/app/agents/events.py`
+- Create: `backend/tests/test_agent_events.py`
 
 **Interfaces:**
-- Consumes: `app.db.crud.workspace`, `app.db.models.Workspace/Document`, `app.services.parsers.parse_and_chunk_document`, `app.core.exceptions.WorkspaceNotFoundError/WorkspaceDocumentNotFoundError`.
-- Produces:
-  - `Tool` dataclass, `TOOLS` dict, `register_tool(tool)`, `get_tools()`.
-  - `EmptyInput`, `GetDocumentChunksInput`, `GraphMutation`, `ALLOWED_RELATIONS`, `apply_graph_mutation(payload, mutation)` (used by Task 8).
-  - `AGENT_SYSTEM_PROMPT`.
-  - Tool functions `get_workspace_graph(db, workspace_id, args)`, `get_workspace_documents(db, workspace_id, args)`, `get_document_chunks(db, workspace_id, args)`, `verify_graph(db, workspace_id, args)`, `edit_workspace_graph(db, workspace_id, args)`, `recompile_workspace(db, workspace_id, args)` — all `async` returning `str`. Every tool has the signature `(db, workspace_id, args)` where `args` is an instance of its `input_schema`; the workspace id is injected by the agent, never requested from the model.
+- Consumes: nothing.
+- Produces: `TextDeltaEvent`, `ToolCallEvent`, `ToolResultEvent`, `ErrorEvent`, `DoneEvent` (dataclasses, each with a `type` literal), the `AgentStreamEvent` union, and `event_to_dict(event) -> dict`. Used by Task 7 (`run_agent`) and Task 8 (route) to serialize SSE.
 
 - [ ] **Step 1: Write the failing test**
+
+`backend/tests/test_agent_events.py`:
+
+```python
+from app.agents.events import (
+    DoneEvent,
+    ErrorEvent,
+    TextDeltaEvent,
+    ToolCallEvent,
+    ToolResultEvent,
+    event_to_dict,
+)
+
+
+def test_event_to_dict_includes_type():
+    assert event_to_dict(TextDeltaEvent(delta="hi")) == {
+        "type": "text_delta",
+        "delta": "hi",
+    }
+
+
+def test_tool_events_serialize():
+    call = event_to_dict(ToolCallEvent(name="verify_graph", arguments={"x": 1}))
+    result = event_to_dict(ToolResultEvent(name="verify_graph", output="ok"))
+    error = event_to_dict(ErrorEvent(message="boom"))
+    done = event_to_dict(DoneEvent())
+    assert call["type"] == "tool_call"
+    assert call["arguments"] == {"x": 1}
+    assert result["type"] == "tool_result"
+    assert error["type"] == "error"
+    assert done == {"type": "done"}
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `pytest tests/test_agent_events.py -q`
+Expected: FAIL with `ModuleNotFoundError: No module named 'app.agents'`.
+
+- [ ] **Step 3: Write minimal implementation**
+
+`backend/app/agents/__init__.py`: empty file.
+
+`backend/app/agents/events.py`:
+
+```python
+"""Typed agent events, serialized to SSE payloads."""
+from dataclasses import asdict, dataclass
+from typing import Any, Dict, Literal
+
+
+@dataclass
+class TextDeltaEvent:
+    type: Literal["text_delta"] = "text_delta"
+    delta: str = ""
+
+
+@dataclass
+class ToolCallEvent:
+    type: Literal["tool_call"] = "tool_call"
+    name: str = ""
+    arguments: Dict[str, Any] = None  # type: ignore[assignment]
+
+
+@dataclass
+class ToolResultEvent:
+    type: Literal["tool_result"] = "tool_result"
+    name: str = ""
+    output: str = ""
+
+
+@dataclass
+class ErrorEvent:
+    type: Literal["error"] = "error"
+    message: str = ""
+
+
+@dataclass
+class DoneEvent:
+    type: Literal["done"] = "done"
+
+
+AgentStreamEvent = (
+    TextDeltaEvent | ToolCallEvent | ToolResultEvent | ErrorEvent | DoneEvent
+)
+
+
+def event_to_dict(event: AgentStreamEvent) -> Dict[str, Any]:
+    """Serialize an event for the SSE payload, including its ``type`` field."""
+    data = asdict(event)
+    data["type"] = event.type
+    return data
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `pytest tests/test_agent_events.py -q`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add app/agents tests/test_agent_events.py
+git commit -m "feat(agents): add typed SSE stream events"
+```
+
+---
+
+### Task 6: Agent tools (`app/agents/tools.py`)
+
+**Files:**
+- Create: `backend/app/agents/tools.py`
+- Create: `backend/tests/test_tools.py`
+- Modify: `backend/requirements.txt`
+
+**Interfaces:**
+- Consumes: `app.db.crud.workspace`, `app.db.models.Workspace/Document`, `app.services.parsers.parse_and_chunk_document` / `parse_document_to_markdown`, `app.services.workspace_service.validate_document_quotes` / `recompile_workspace` (aliased `service_recompile`), `app.core.exceptions.*`.
+- Produces:
+  - `GraphMutation`, `ALLOWED_RELATIONS`, `apply_graph_mutation(payload, mutation) -> GraphPayload` (raises `ValueError` on invalid mutations).
+  - `AGENT_SYSTEM_PROMPT: str`.
+  - `build_tools(db: Session, workspace_id: str) -> list[StructuredTool]` — the six tools, closure-bound to the request's db + workspace. The LLM never sees or supplies db/workspace id.
+
+- [ ] **Step 1: Install the new dependencies**
+
+Run (from `backend/`, venv active):
+
+```bash
+python -m pip install langgraph langchain-openai langchain-google-genai
+```
+
+Add to `backend/requirements.txt`:
+
+```
+langchain-google-genai==<installed version>
+langchain-openai==<installed version>
+langgraph==<installed version>
+```
+
+(Use the exact versions `pip` installs, matching the file's pinned style.)
+
+- [ ] **Step 2: Write the failing test**
 
 `backend/tests/test_tools.py`:
 
@@ -668,17 +804,20 @@ git commit -m "refactor(graph): extract react flow mapping into app/services/rea
 import asyncio
 import json
 
+import pytest
+
 from app.agents.tools import (
-    EmptyInput,
-    TOOLS,
-    get_tools,
-    get_workspace_documents,
-    get_workspace_graph,
+    ALLOWED_RELATIONS,
+    GraphMutation,
+    apply_graph_mutation,
+    build_tools,
 )
 from app.db.database import SessionLocal
 from app.db.models import Document, Workspace
+from app.enums.node import EdgeRelation, NodeCategory
 from app.enums.workspace import WorkspaceStatus
-from tests.helpers import make_fake_payload
+from app.schemas.node import GraphEdge, GraphNode
+from tests.helpers import make_fake_payload, make_fake_payload_with_invalid_quote
 
 
 def _run(coro):
@@ -698,239 +837,97 @@ def _workspace_with_graph(db, name="ws"):
     return ws
 
 
-def test_tool_registry_has_six_tools():
-    names = {t.name for t in get_tools()}
-    assert names == {
-        "get_workspace_graph",
-        "get_workspace_documents",
-        "get_document_chunks",
-        "verify_graph",
-        "edit_workspace_graph",
-        "recompile_workspace",
-    }
+def _node(node_id):
+    return GraphNode(
+        id=node_id,
+        document_id="0",
+        node_category=NodeCategory.CLAIM,
+        title="T",
+        summary="S.",
+        quote="Some quote.",
+    )
 
 
-def test_get_workspace_graph_returns_payload_json():
+TOOL_NAMES = {
+    "get_workspace_graph",
+    "get_workspace_documents",
+    "get_document_chunks",
+    "verify_graph",
+    "edit_workspace_graph",
+    "recompile_workspace",
+}
+
+
+def test_build_tools_returns_six_tools():
+    tools = build_tools(db=None, workspace_id="ws")
+    assert {t.name for t in tools} == TOOL_NAMES
+
+
+def test_apply_mutation_adds_node_and_edge():
+    payload = make_fake_payload()
+    updated = apply_graph_mutation(payload, GraphMutation(
+        add_nodes=[_node("claim-2")],
+        add_edges=[GraphEdge(
+            id="e-new",
+            source="evidence-1",
+            target="claim-2",
+            relation=EdgeRelation.SUPPORTS,
+            reasoning="Backs it.",
+        )],
+    ))
+    assert {n.id for n in updated.nodes} == {"claim-1", "evidence-1", "tradeoff-1", "claim-2"}
+    assert any(e.id == "e-new" for e in updated.edges)
+
+
+def test_apply_mutation_rejects_dangling_edge():
+    payload = make_fake_payload()
+    with pytest.raises(ValueError):
+        apply_graph_mutation(payload, GraphMutation(
+            add_edges=[GraphEdge(
+                id="e-bad",
+                source="evidence-1",
+                target="no-such-node",
+                relation=EdgeRelation.SUPPORTS,
+                reasoning="Bad.",
+            )],
+        ))
+
+
+def test_apply_mutation_rejects_relation_matrix_violation():
+    payload = make_fake_payload()
+    with pytest.raises(ValueError):
+        apply_graph_mutation(payload, GraphMutation(
+            add_edges=[GraphEdge(
+                id="e-bad",
+                source="evidence-1",
+                target="tradeoff-1",
+                relation=EdgeRelation.CAUSES,
+                reasoning="evidence -> limitation is not allowed",
+            )],
+        ))
+
+
+def test_apply_mutation_remove_cascades_edges():
+    payload = make_fake_payload()
+    updated = apply_graph_mutation(payload, GraphMutation(remove_node_ids=["evidence-1"]))
+    assert "evidence-1" not in {n.id for n in updated.nodes}
+    assert all(e.source != "evidence-1" and e.target != "evidence-1" for e in updated.edges)
+
+
+def test_get_workspace_graph_tool_returns_json():
     db = SessionLocal()
     try:
         ws = _workspace_with_graph(db)
-        out = _run(get_workspace_graph(db, ws.id, EmptyInput()))
+        tools = build_tools(db, ws.id)
+        by_name = {t.name: t for t in tools}
+        out = _run(by_name["get_workspace_graph"].ainvoke({}))
         data = json.loads(out)
         assert {n["id"] for n in data["nodes"]} == {"claim-1", "evidence-1", "tradeoff-1"}
     finally:
         db.close()
 
 
-def test_get_workspace_documents_returns_metadata():
-    db = SessionLocal()
-    try:
-        ws = _workspace_with_graph(db)
-        doc = Document(
-            id="doc-1",
-            workspace_id=ws.id,
-            filename="paper.pdf",
-            file_path="nonexistent.pdf",
-        )
-        db.add(doc)
-        db.commit()
-        out = _run(get_workspace_documents(db, ws.id, EmptyInput()))
-        data = json.loads(out)
-        assert data[0]["filename"] == "paper.pdf"
-    finally:
-        db.close()
-```
-
-Note: `make_fake_payload()` uses `NodeCategory.TRADEOFF` at `tests/helpers.py:57`; Task 0 already replaced it with `LIMITATION`, so the node id `"tradeoff-1"` is just an id string and stays valid.
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `pytest tests/test_tools.py -q`
-Expected: FAIL with `ModuleNotFoundError: No module named 'app.agents'`.
-
-- [ ] **Step 3: Write minimal implementation**
-
-`backend/app/agents/__init__.py`: empty file.
-
-Create `backend/app/agents/tools.py` with the registry and the three read tools (Tasks 6-8 add the remaining tools and register them here too):
-
-```python
-"""Agent tool registry and the ClaimGraph tool set.
-
-A tool is a named, schema-typed async function the agent can call. The Pydantic
-input schema doubles as the JSON schema shown to the LLM. Tool functions share
-one signature: ``func(db, workspace_id, args) -> str`` where ``args`` is an
-instance of the tool's ``input_schema`` (the workspace id is injected by the
-agent, never requested from the model).
-"""
-from dataclasses import dataclass
-from typing import Awaitable, Callable, Dict, List
-
-import json
-
-from pydantic import BaseModel
-from sqlalchemy.orm import Session
-
-from app.core.exceptions import (
-    WorkspaceDocumentNotFoundError,
-    WorkspaceNotFoundError,
-)
-from app.db.crud import workspace as workspace_crud
-from app.db.models import Document
-
-
-@dataclass(frozen=True)
-class Tool:
-    name: str
-    description: str
-    input_schema: type[BaseModel]
-    func: Callable[..., Awaitable[str]]
-
-
-TOOLS: Dict[str, Tool] = {}
-
-
-def register_tool(tool: Tool) -> None:
-    TOOLS[tool.name] = tool
-
-
-def get_tools() -> List[Tool]:
-    return list(TOOLS.values())
-
-
-class EmptyInput(BaseModel):
-    pass
-
-
-class GetDocumentChunksInput(BaseModel):
-    document_id: str
-
-
-async def get_workspace_graph(db: Session, workspace_id: str, args: EmptyInput) -> str:
-    workspace = workspace_crud.get_workspace(db, workspace_id)
-    if workspace is None:
-        raise WorkspaceNotFoundError()
-    if workspace.graph_payload is None:
-        return "No compiled graph yet for this workspace."
-    return json.dumps(workspace.graph_payload, ensure_ascii=False)
-
-
-register_tool(Tool(
-    name="get_workspace_graph",
-    description=(
-        "Return the compiled semantic graph for this workspace as JSON: per-document "
-        "analysis, nodes (id, title, category, summary, verbatim quote), and edges "
-        "(source, target, relation, reasoning)."
-    ),
-    input_schema=EmptyInput,
-    func=get_workspace_graph,
-))
-
-
-async def get_workspace_documents(db: Session, workspace_id: str, args: EmptyInput) -> str:
-    workspace = workspace_crud.get_workspace(db, workspace_id)
-    if workspace is None:
-        raise WorkspaceNotFoundError()
-    docs = [
-        {
-            "id": d.id,
-            "filename": d.filename,
-            "status": d.status.value,
-            "claim_count": d.claim_count,
-            "evidence_count": d.evidence_count,
-        }
-        for d in workspace.documents
-    ]
-    return json.dumps(docs, ensure_ascii=False)
-
-
-register_tool(Tool(
-    name="get_workspace_documents",
-    description="Return the source documents of this workspace (id, filename, status, counts).",
-    input_schema=EmptyInput,
-    func=get_workspace_documents,
-))
-
-
-async def get_document_chunks(
-    db: Session, workspace_id: str, args: GetDocumentChunksInput
-) -> str:
-    doc = (
-        db.query(Document)
-        .filter(Document.id == args.document_id, Document.workspace_id == workspace_id)
-        .first()
-    )
-    if doc is None:
-        raise WorkspaceDocumentNotFoundError()
-    chunks = parse_and_chunk_document(doc.file_path)
-    texts = [getattr(c, "text", str(c)) for c in chunks][:20]
-    return json.dumps(texts, ensure_ascii=False)
-
-
-register_tool(Tool(
-    name="get_document_chunks",
-    description=(
-        "Return up to 20 semantic chunks of one source document as a JSON list of "
-        "strings, for answers that need the original wording. Provide the document id."
-    ),
-    input_schema=GetDocumentChunksInput,
-    func=get_document_chunks,
-))
-
-
-AGENT_SYSTEM_PROMPT = """You are the ClaimGraph Assistant, a helpful agent for a workspace of technical papers. The workspace has an extracted argumentation graph (nodes + edges) and source documents.
-
-You have tools to read the graph and documents, verify claims, edit the graph, and recompile. Prefer reading the graph before answering. When you edit or recompile the graph, the frontend refreshes automatically; end your reply by telling the user the canvas updated.
-
-Rules:
-- Never invent quotes, node ids, or document ids. If a tool output does not contain what you need, say so.
-- Verify claims by calling verify_graph and reporting which nodes could not be source-verified.
-- Use recompile_workspace sparingly: it is slow and state-changing.
-- Keep answers concise and grounded in tool output.
-"""
-```
-
-Add the missing import at the top of the file:
-
-```python
-from app.services.parsers import parse_and_chunk_document
-```
-
-- [ ] **Step 4: Run tests to verify they pass**
-
-Run: `pytest tests/test_tools.py -q`
-Expected: PASS. (`test_tool_registry_has_six_tools` will fail until Tasks 6-8 register the remaining tools; see Task 5 Step 4a note.)
-
-> **Note:** `test_tool_registry_has_six_tools` asserts all six tools exist. It will fail until Tasks 6, 7, and 8 register `verify_graph`, `edit_workspace_graph`, and `recompile_workspace`. This is intentional — the test drives the remaining tasks. If you run the suite at this checkpoint, expect exactly that one test to fail; the other tool tests pass.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add app/agents tests/test_tools.py
-git commit -m "feat(agents): add tool registry and read tools"
-```
-
----
-
-### Task 6: `verify_graph` tool
-
-**Files:**
-- Modify: `backend/app/agents/tools.py`
-- Modify: `backend/tests/test_tools.py`
-
-**Interfaces:**
-- Consumes: `validate_document_quotes` from `app.services.workspace_service`, `parse_document_to_markdown` from `app.services.parsers`, `GraphPayload.model_validate`.
-- Produces: registered `verify_graph` tool (satisfies the Task 5 registry test).
-
-- [ ] **Step 1: Write the failing test**
-
-Add to `backend/tests/test_tools.py`:
-
-```python
-from app.agents.tools import verify_graph
-from tests.helpers import make_fake_payload_with_invalid_quote
-
-
-def test_verify_graph_flags_non_verbatim_quote(fake_pdf):
+def test_verify_graph_tool_flags_non_verbatim_quote(fake_pdf):
     db = SessionLocal()
     try:
         ws = Workspace(
@@ -951,194 +948,25 @@ def test_verify_graph_flags_non_verbatim_quote(fake_pdf):
         db.add(doc)
         db.commit()
 
-        out = _run(verify_graph(db, ws.id, EmptyInput()))
+        tools = build_tools(db, ws.id)
+        by_name = {t.name: t for t in tools}
+        out = _run(by_name["verify_graph"].ainvoke({}))
         data = json.loads(out)
         assert data["unverified"] == ["evidence-bad"]
         assert data["verified"] == 1
     finally:
         db.close()
-```
-
-`make_fake_payload_with_invalid_quote` (helpers.py:78) has a node `"evidence-bad"` whose quote is `NON_VERBATIM_QUOTE` — not present in the fake PDF text.
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `pytest tests/test_tools.py::test_verify_graph_flags_non_verbatim_quote -q`
-Expected: FAIL with `AttributeError: module 'app.agents.tools' has no attribute 'verify_graph'`.
-
-- [ ] **Step 3: Write minimal implementation**
-
-Append to `backend/app/agents/tools.py`:
-
-```python
-async def verify_graph(db: Session, workspace_id: str, args: EmptyInput) -> str:
-    workspace = workspace_crud.get_workspace(db, workspace_id)
-    if workspace is None:
-        raise WorkspaceNotFoundError()
-    if workspace.graph_payload is None:
-        return "No compiled graph to verify for this workspace."
-    claim_graph = GraphPayload.model_validate(workspace.graph_payload)
-    documents = [
-        {
-            "document_id": d.id,
-            "content": parse_document_to_markdown(d.file_path),
-            "filename": d.filename,
-        }
-        for d in workspace.documents
-    ]
-    valid_nodes, _ = validate_document_quotes(documents, claim_graph)
-    valid_ids = {n.id for n in valid_nodes}
-    dropped = [
-        {"node_id": n.id, "title": n.title, "quote": n.quote}
-        for n in claim_graph.nodes
-        if n.id not in valid_ids
-    ]
-    return json.dumps(
-        {
-            "checked_nodes": len(claim_graph.nodes),
-            "verified": len(valid_nodes),
-            "unverified": [d["node_id"] for d in dropped],
-            "details": dropped,
-        },
-        ensure_ascii=False,
-    )
-
-
-register_tool(Tool(
-    name="verify_graph",
-    description=(
-        "Deterministically re-check that every node's quote appears verbatim in its "
-        "source document. Returns checked/verified counts and the node ids whose "
-        "quotes could not be found. No LLM cost."
-    ),
-    input_schema=EmptyInput,
-    func=verify_graph,
-))
-```
-
-Add imports to the top of `tools.py`:
-
-```python
-from app.enums.node import EdgeRelation, NodeCategory
-from app.schemas.graph import GraphPayload
-from app.schemas.node import GraphEdge, GraphNode
-from app.services.parsers import parse_and_chunk_document, parse_document_to_markdown
-from app.services.workspace_service import validate_document_quotes
-```
-
-- [ ] **Step 4: Run tests to verify they pass**
-
-Run: `pytest tests/test_tools.py -q`
-Expected: `test_verify_graph_flags_non_verbatim_quote` PASS; `test_tool_registry_has_six_tools` still fails (waits for Tasks 7-8).
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add app/agents/tools.py tests/test_tools.py
-git commit -m "feat(agents): add verify_graph tool"
-```
-
----
-
-### Task 7: `edit_workspace_graph` tool
-
-**Files:**
-- Modify: `backend/app/agents/tools.py`
-- Modify: `backend/tests/test_tools.py`
-
-**Interfaces:**
-- Consumes: `GraphMutation` + `apply_graph_mutation` (defined in this task), `GraphPayload` schema.
-- Produces: registered `edit_workspace_graph` tool; `apply_graph_mutation(payload, mutation) -> GraphPayload` pure function that raises `ValueError` on invalid mutations. Satisfies the Task 5 registry test (partially).
-
-- [ ] **Step 1: Write the failing test**
-
-Add to `backend/tests/test_tools.py`:
-
-```python
-import pytest
-
-from app.agents.tools import GraphMutation, apply_graph_mutation, edit_workspace_graph
-from app.enums.node import EdgeRelation, NodeCategory
-from app.schemas.node import GraphEdge, GraphNode
-
-
-def _node(node_id):
-    return GraphNode(
-        id=node_id,
-        document_id="0",
-        node_category=NodeCategory.CLAIM,
-        title="T",
-        summary="S.",
-        quote="Some quote.",
-    )
-
-
-def test_apply_mutation_adds_node_and_edge():
-    from tests.helpers import make_fake_payload
-
-    payload = make_fake_payload()
-    new_node = _node("claim-2")
-    updated = apply_graph_mutation(payload, GraphMutation(
-        add_nodes=[new_node],
-        add_edges=[GraphEdge(
-            id="e-new",
-            source="evidence-1",
-            target="claim-2",
-            relation=EdgeRelation.SUPPORTS,
-            reasoning="Backs it.",
-        )],
-    ))
-    assert {n.id for n in updated.nodes} == {"claim-1", "evidence-1", "tradeoff-1", "claim-2"}
-    assert any(e.id == "e-new" for e in updated.edges)
-
-
-def test_apply_mutation_rejects_dangling_edge():
-    from tests.helpers import make_fake_payload
-
-    payload = make_fake_payload()
-    with pytest.raises(ValueError):
-        apply_graph_mutation(payload, GraphMutation(
-            add_edges=[GraphEdge(
-                id="e-bad",
-                source="evidence-1",
-                target="no-such-node",
-                relation=EdgeRelation.SUPPORTS,
-                reasoning="Bad.",
-            )],
-        ))
-
-
-def test_apply_mutation_rejects_relation_matrix_violation():
-    from tests.helpers import make_fake_payload
-
-    payload = make_fake_payload()
-    with pytest.raises(ValueError):
-        apply_graph_mutation(payload, GraphMutation(
-            add_edges=[GraphEdge(
-                id="e-bad",
-                source="evidence-1",
-                target="tradeoff-1",
-                relation=EdgeRelation.CAUSES,
-                reasoning="evidence -> tradeoff is not allowed by the matrix",
-            )],
-        ))
-
-
-def test_apply_mutation_remove_cascades_edges():
-    from tests.helpers import make_fake_payload
-
-    payload = make_fake_payload()
-    updated = apply_graph_mutation(payload, GraphMutation(remove_node_ids=["evidence-1"]))
-    assert "evidence-1" not in {n.id for n in updated.nodes}
-    assert all(e.source != "evidence-1" and e.target != "evidence-1" for e in updated.edges)
 
 
 def test_edit_tool_persists_to_db():
     db = SessionLocal()
     try:
         ws = _workspace_with_graph(db)
-        new_node = _node("claim-2")
-        out = _run(edit_workspace_graph(db, ws.id, GraphMutation(add_nodes=[new_node])))
+        tools = build_tools(db, ws.id)
+        by_name = {t.name: t for t in tools}
+        mutation = {"add_nodes": [_node("claim-2").model_dump()],
+                    "remove_node_ids": [], "add_edges": [], "remove_edge_ids": []}
+        out = _run(by_name["edit_workspace_graph"].ainvoke(mutation))
         db.refresh(ws)
         payload = json.loads(ws.graph_payload) if isinstance(ws.graph_payload, str) else ws.graph_payload
         assert "claim-2" in {n["id"] for n in payload["nodes"]}
@@ -1147,16 +975,47 @@ def test_edit_tool_persists_to_db():
         db.close()
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [ ] **Step 3: Run test to verify it fails**
 
-Run: `pytest tests/test_tools.py::test_apply_mutation_adds_node_and_edge -q`
-Expected: FAIL with `ImportError: cannot import name 'GraphMutation'`.
+Run: `pytest tests/test_tools.py -q`
+Expected: FAIL with `ModuleNotFoundError: No module named 'app.agents.tools'`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [ ] **Step 4: Write minimal implementation**
 
-Append to `backend/app/agents/tools.py`:
+Create `backend/app/agents/tools.py`:
 
 ```python
+"""Agent tools bound to a workspace, built for LangGraph's ToolNode.
+
+The pure graph-mutation logic (``apply_graph_mutation``) is module-level and
+unit-tested directly; ``build_tools`` returns the six LangChain tools, each
+closure-bound to the request's db session and workspace id so the LLM never
+sees or supplies either.
+"""
+from typing import Dict, List
+
+import json
+
+from langchain_core.tools import StructuredTool
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from app.core.exceptions import (
+    WorkspaceDocumentNotFoundError,
+    WorkspaceNotFoundError,
+)
+from app.db.crud import workspace as workspace_crud
+from app.db.models import Document
+from app.enums.node import EdgeRelation, NodeCategory
+from app.schemas.graph import GraphPayload
+from app.schemas.node import GraphEdge, GraphNode
+from app.services.parsers import parse_and_chunk_document, parse_document_to_markdown
+from app.services.workspace_service import (
+    recompile_workspace as service_recompile,
+)
+from app.services.workspace_service import validate_document_quotes
+
+
 class GraphMutation(BaseModel):
     add_nodes: List[GraphNode] = []
     remove_node_ids: List[str] = []
@@ -1232,431 +1091,440 @@ def apply_graph_mutation(payload: GraphPayload, mutation: GraphMutation) -> Grap
     )
 
 
-async def edit_workspace_graph(
-    db: Session, workspace_id: str, args: GraphMutation
-) -> str:
-    workspace = workspace_crud.get_workspace(db, workspace_id)
-    if workspace is None:
-        raise WorkspaceNotFoundError()
-    if workspace.graph_payload is None:
-        return "No compiled graph to edit for this workspace."
-    payload = GraphPayload.model_validate(workspace.graph_payload)
-    try:
-        updated = apply_graph_mutation(payload, args)
-    except ValueError as exc:
-        return f"Mutation rejected: {exc}"
-    workspace.graph_payload = updated.model_dump(mode="json")
-    db.commit()
-    return (
-        f"Graph updated. nodes={len(updated.nodes)} edges={len(updated.edges)}. "
-        "Tell the user the canvas will refresh."
-    )
+AGENT_SYSTEM_PROMPT = """You are the ClaimGraph Assistant, a helpful agent for a workspace of technical papers. The workspace has an extracted argumentation graph (nodes + edges) and source documents.
+
+You have tools to read the graph and documents, verify claims, edit the graph, and recompile. Prefer reading the graph before answering. When you edit or recompile the graph, the frontend refreshes automatically; end your reply by telling the user the canvas updated.
+
+Rules:
+- Never invent quotes, node ids, or document ids. If a tool output does not contain what you need, say so.
+- Verify claims by calling verify_graph and reporting which nodes could not be source-verified.
+- Use recompile_workspace sparingly: it is slow and state-changing.
+- Keep answers concise and grounded in tool output.
+"""
 
 
-register_tool(Tool(
-    name="edit_workspace_graph",
-    description=(
-        "Apply a validated mutation to the compiled graph: add_nodes, remove_node_ids, "
-        "add_edges, remove_edge_ids. Edges are checked against the allowed relation "
-        "matrix and referential integrity. The canvas refreshes automatically after a "
-        "successful edit."
-    ),
-    input_schema=GraphMutation,
-    func=edit_workspace_graph,
-))
+def build_tools(db: Session, workspace_id: str) -> List[StructuredTool]:
+    """Return the six tools, closure-bound to this request's db + workspace."""
+
+    async def get_workspace_graph_tool() -> str:
+        workspace = workspace_crud.get_workspace(db, workspace_id)
+        if workspace is None:
+            raise WorkspaceNotFoundError()
+        if workspace.graph_payload is None:
+            return "No compiled graph yet for this workspace."
+        return json.dumps(workspace.graph_payload, ensure_ascii=False)
+
+    async def get_workspace_documents_tool() -> str:
+        workspace = workspace_crud.get_workspace(db, workspace_id)
+        if workspace is None:
+            raise WorkspaceNotFoundError()
+        docs = [
+            {
+                "id": d.id,
+                "filename": d.filename,
+                "status": d.status.value,
+                "claim_count": d.claim_count,
+                "evidence_count": d.evidence_count,
+            }
+            for d in workspace.documents
+        ]
+        return json.dumps(docs, ensure_ascii=False)
+
+    async def get_document_chunks_tool(document_id: str) -> str:
+        doc = (
+            db.query(Document)
+            .filter(Document.id == document_id, Document.workspace_id == workspace_id)
+            .first()
+        )
+        if doc is None:
+            raise WorkspaceDocumentNotFoundError()
+        chunks = parse_and_chunk_document(doc.file_path)
+        texts = [getattr(c, "text", str(c)) for c in chunks][:20]
+        return json.dumps(texts, ensure_ascii=False)
+
+    async def verify_graph_tool() -> str:
+        workspace = workspace_crud.get_workspace(db, workspace_id)
+        if workspace is None:
+            raise WorkspaceNotFoundError()
+        if workspace.graph_payload is None:
+            return "No compiled graph to verify for this workspace."
+        claim_graph = GraphPayload.model_validate(workspace.graph_payload)
+        documents = [
+            {
+                "document_id": d.id,
+                "content": parse_document_to_markdown(d.file_path),
+                "filename": d.filename,
+            }
+            for d in workspace.documents
+        ]
+        valid_nodes, _ = validate_document_quotes(documents, claim_graph)
+        valid_ids = {n.id for n in valid_nodes}
+        dropped = [
+            {"node_id": n.id, "title": n.title, "quote": n.quote}
+            for n in claim_graph.nodes
+            if n.id not in valid_ids
+        ]
+        return json.dumps(
+            {
+                "checked_nodes": len(claim_graph.nodes),
+                "verified": len(valid_nodes),
+                "unverified": [d["node_id"] for d in dropped],
+                "details": dropped,
+            },
+            ensure_ascii=False,
+        )
+
+    async def edit_workspace_graph_tool(mutation: GraphMutation) -> str:
+        workspace = workspace_crud.get_workspace(db, workspace_id)
+        if workspace is None:
+            raise WorkspaceNotFoundError()
+        if workspace.graph_payload is None:
+            return "No compiled graph to edit for this workspace."
+        payload = GraphPayload.model_validate(workspace.graph_payload)
+        try:
+            updated = apply_graph_mutation(payload, mutation)
+        except ValueError as exc:
+            return f"Mutation rejected: {exc}"
+        workspace.graph_payload = updated.model_dump(mode="json")
+        db.commit()
+        return (
+            f"Graph updated. nodes={len(updated.nodes)} edges={len(updated.edges)}. "
+            "Tell the user the canvas will refresh."
+        )
+
+    async def recompile_workspace_tool() -> str:
+        service_recompile(db, workspace_id)
+        return (
+            "Recompilation finished. Tell the user the graph has been regenerated "
+            "and the canvas will refresh."
+        )
+
+    return [
+        StructuredTool.from_function(
+            coroutine=get_workspace_graph_tool,
+            name="get_workspace_graph",
+            description=(
+                "Return the compiled semantic graph for this workspace as JSON: per-document "
+                "analysis, nodes (id, title, category, summary, verbatim quote), and edges "
+                "(source, target, relation, reasoning)."
+            ),
+        ),
+        StructuredTool.from_function(
+            coroutine=get_workspace_documents_tool,
+            name="get_workspace_documents",
+            description="Return the source documents of this workspace (id, filename, status, counts).",
+        ),
+        StructuredTool.from_function(
+            coroutine=get_document_chunks_tool,
+            name="get_document_chunks",
+            description=(
+                "Return up to 20 semantic chunks of one source document as a JSON list of "
+                "strings, for answers that need the original wording. Provide the document id."
+            ),
+        ),
+        StructuredTool.from_function(
+            coroutine=verify_graph_tool,
+            name="verify_graph",
+            description=(
+                "Deterministically re-check that every node's quote appears verbatim in its "
+                "source document. Returns checked/verified counts and the node ids whose "
+                "quotes could not be found. No LLM cost."
+            ),
+        ),
+        StructuredTool.from_function(
+            coroutine=edit_workspace_graph_tool,
+            name="edit_workspace_graph",
+            description=(
+                "Apply a validated mutation to the compiled graph: add_nodes, remove_node_ids, "
+                "add_edges, remove_edge_ids. Edges are checked against the allowed relation "
+                "matrix and referential integrity. The canvas refreshes automatically after a "
+                "successful edit."
+            ),
+            args_schema=GraphMutation,
+        ),
+        StructuredTool.from_function(
+            coroutine=recompile_workspace_tool,
+            name="recompile_workspace",
+            description=(
+                "Re-run the full compilation pipeline for this workspace: re-parse every "
+                "document and re-extract the graph with the LLM. SLOW and state-changing; "
+                "use only when the user explicitly asks to recompile or re-verify from scratch."
+            ),
+        ),
+    ]
 ```
 
-Update the `GraphMutation` class definition to match its use as a tool input schema. Note: `GraphMutation` is defined AFTER `get_tools()`/`TOOLS` in the file; the `register_tool(GraphMutation...)` call must come after the class definition, which it does (appended at the end). Ensure `Dict`, `Tuple`, `Set` typing imports are available (`from typing import ... Dict, List` already there; add `Tuple`, `Set`).
-
-- [ ] **Step 4: Run tests to verify they pass**
+- [ ] **Step 5: Run tests to verify they pass**
 
 Run: `pytest tests/test_tools.py -q`
-Expected: PASS for all mutation tests and `test_edit_tool_persists_to_db`; `test_tool_registry_has_six_tools` still fails (waits for Task 8).
+Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add app/agents/tools.py tests/test_tools.py
-git commit -m "feat(agents): add validated edit_workspace_graph tool"
+git add app/agents/tools.py tests/test_tools.py requirements.txt
+git commit -m "feat(agents): add six LangChain tools with validated graph mutation"
 ```
 
 ---
 
-### Task 8: `recompile_workspace` tool
+### Task 7: LangGraph agent (`app/agents/graph.py`)
 
 **Files:**
-- Modify: `backend/app/agents/tools.py`
-- Modify: `backend/tests/test_tools.py`
+- Create: `backend/app/agents/graph.py`
+- Create: `backend/tests/test_agent_graph.py`
 
 **Interfaces:**
-- Consumes: `app.services.workspace_service.recompile_workspace` (aliased to avoid the name clash).
-- Produces: registered `recompile_workspace` tool. Completes the Task 5 registry test.
-
-- [ ] **Step 1: Write the failing test**
-
-Add to `backend/tests/test_tools.py`:
-
-```python
-from app.agents import tools as tools_module
-from app.agents.tools import recompile_workspace
-
-
-def test_recompile_tool_invokes_service(monkeypatch):
-    db = SessionLocal()
-    try:
-        ws = _workspace_with_graph(db)
-        calls = []
-
-        def fake_recompile(session, workspace_id):
-            calls.append(workspace_id)
-
-        monkeypatch.setattr(tools_module, "service_recompile", fake_recompile)
-        out = _run(recompile_workspace(db, ws.id, EmptyInput()))
-        assert calls == [ws.id]
-        assert "regenerated" in out
-    finally:
-        db.close()
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `pytest tests/test_tools.py::test_recompile_tool_invokes_service -q`
-Expected: FAIL with `AttributeError: module 'app.agents.tools' has no attribute 'recompile_workspace'`.
-
-- [ ] **Step 3: Write minimal implementation**
-
-Add to the imports at the top of `backend/app/agents/tools.py`:
-
-```python
-from app.services.workspace_service import (
-    recompile_workspace as service_recompile,
-)
-```
-
-Append to `backend/app/agents/tools.py`:
-
-```python
-async def recompile_workspace(db: Session, workspace_id: str, args: EmptyInput) -> str:
-    service_recompile(db, workspace_id)
-    return (
-        "Recompilation finished. Tell the user the graph has been regenerated "
-        "and the canvas will refresh."
-    )
-
-
-register_tool(Tool(
-    name="recompile_workspace",
-    description=(
-        "Re-run the full compilation pipeline for this workspace: re-parse every "
-        "document and re-extract the graph with the LLM. SLOW and state-changing; "
-        "use only when the user explicitly asks to recompile or re-verify from scratch."
-    ),
-    input_schema=EmptyInput,
-    func=recompile_workspace,
-))
-```
-
-- [ ] **Step 4: Run tests to verify they pass**
-
-Run: `pytest tests/test_tools.py -q`
-Expected: PASS, including `test_tool_registry_has_six_tools`.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add app/agents/tools.py tests/test_tools.py
-git commit -m "feat(agents): add recompile_workspace tool"
-```
-
----
-
-### Task 9: `simple_agent.py` — bounded async agent loop
-
-**Files:**
-- Create: `backend/app/agents/simple_agent.py`
-- Create: `backend/tests/test_simple_agent.py`
-
-**Interfaces:**
-- Consumes: `AGENT_SYSTEM_PROMPT`, `TOOLS`, `Tool` from `app.agents.tools`; `chat_structured` from `app.llm.structured`.
+- Consumes: `app.agents.tools.build_tools`/`AGENT_SYSTEM_PROMPT`, `app.agents.events` (event types), `settings`, `langgraph`, `langchain_openai`/`langchain_google_genai`.
 - Produces:
-  - `FinalAnswer`, `ToolCall`, `AgentDecision` (discriminated union of the two).
-  - `AgentStreamEvent` events: `TextDeltaEvent`, `ToolCallEvent`, `ToolResultEvent`, `ErrorEvent`, `DoneEvent` (dataclasses, each with a `type` literal).
-  - `event_to_dict(event) -> dict` (adds a `"type"` field for SSE serialization).
-  - `SimpleAgent(db, workspace_id, *, tools=None, max_iterations=10)` with `async def stream(user_message) -> AsyncGenerator[AgentStreamEvent, None]`.
-  - `MAX_ITERATIONS = 10`.
+  - `build_model() -> BaseChatModel` — `ChatOpenAI` (OpenAI-compatible `base_url`) for `llm_provider == "openai"`; `ChatGoogleGenerativeAI` for `"google"`.
+  - `build_agent(tools, model=None) -> CompiledStateGraph` — LangGraph ReAct: `agent` node (model `bind_tools`) -> `tools` node via `tools_condition` -> back to `agent`; bounded by `recursion_limit`.
+  - `run_agent(agent, user_message) -> AsyncGenerator[AgentStreamEvent, None]` — maps `astream_events(version="v2")` to ClaimGraph SSE events, always ending with `DoneEvent`.
+  - `RECURSION_LIMIT = 25`.
 
 - [ ] **Step 1: Write the failing test**
 
-`backend/tests/test_simple_agent.py`:
+`backend/tests/test_agent_graph.py`:
 
 ```python
 import asyncio
 
-from app.agents import simple_agent
-from app.agents.simple_agent import (
-    MAX_ITERATIONS,
-    DoneEvent,
-    ErrorEvent,
-    FinalAnswer,
-    SimpleAgent,
-    TextDeltaEvent,
-    ToolCall,
-    ToolCallEvent,
-    ToolResultEvent,
-)
-from app.agents.tools import Tool
-from pydantic import BaseModel
-
-
-class _EchoInput(BaseModel):
-    text: str
-
-
-async def _echo_tool(db, workspace_id, args: _EchoInput) -> str:
-    return f"echo:{args.text}"
-
-
-TOOLS = {
-    "echo": Tool(
-        name="echo",
-        description="Echo a string back.",
-        input_schema=_EchoInput,
-        func=_echo_tool,
-    )
-}
+from app.agents import graph
+from app.agents.events import DoneEvent, ErrorEvent, TextDeltaEvent
+from app.agents.graph import build_agent, build_model, run_agent
+from app.agents.tools import build_tools
+from langchain_core.messages import AIMessage
+from langchain_core.tools import StructuredTool
 
 
 def _run(coro):
     return asyncio.run(coro)
 
 
-def _scripted(fake):
-    def chat_structured(system, messages, response_model, **kwargs):
-        return fake()
-    return chat_structured
+def _events(agent_events):
+    class _FakeAgent:
+        async def astream_events(self, input, **kwargs):
+            for event in agent_events:
+                yield event
+
+    return _FakeAgent()
 
 
-def test_agent_streams_tool_then_answer(monkeypatch):
-    calls = []
-
-    def fake():
-        calls.append(1)
-        if len(calls) == 1:
-            return ToolCall(tool_name="echo", arguments={"text": "hi"})
-        return FinalAnswer(answer="done")
-
-    monkeypatch.setattr(simple_agent, "chat_structured", _scripted(fake))
-
-    agent = SimpleAgent(db=None, workspace_id="ws", tools=TOOLS)
-    events = [e for e in _run(agent.stream("hello"))]
-
-    types = [e.type for e in events]
-    assert types == ["tool_call", "tool_result", "text_delta", "done"]
-    assert events[0].name == "echo"
-    assert events[0].arguments == {"text": "hi"}
-    assert events[1].output == "echo:hi"
-    assert events[2].delta == "done"
-    assert isinstance(events[3], DoneEvent)
+class _Chunk:
+    def __init__(self, content):
+        self.content = content
 
 
-def test_agent_unknown_tool_returns_error_text(monkeypatch):
-    monkeypatch.setattr(
-        simple_agent,
-        "chat_structured",
-        _scripted(lambda: ToolCall(tool_name="nope", arguments={})),
-    )
+def test_build_model_uses_openai_compatible():
+    from app.core.settings import settings
 
-    agent = SimpleAgent(db=None, workspace_id="ws", tools=TOOLS)
-    events = [e for e in _run(agent.stream("hi"))]
-
-    assert events[0].type == "tool_call"
-    assert "Unknown tool: nope" in events[1].output
-    assert events[2].type == "tool_call"
+    old = settings.llm_provider
+    settings.llm_provider = "openai"
+    try:
+        model = build_model()
+        assert model.model_name == settings.llm_model_name
+    finally:
+        settings.llm_provider = old
 
 
-def test_agent_exceeding_max_iterations_emits_error(monkeypatch):
-    monkeypatch.setattr(
-        simple_agent,
-        "chat_structured",
-        _scripted(lambda: ToolCall(tool_name="echo", arguments={"text": "x"})),
-    )
+def test_build_agent_compiles():
+    agent = build_agent(build_tools(db=None, workspace_id="ws"))
+    assert hasattr(agent, "astream_events")
 
-    agent = SimpleAgent(
-        db=None, workspace_id="ws", tools=TOOLS, max_iterations=2
-    )
-    events = [e for e in _run(agent.stream("hi"))]
 
+def test_run_agent_maps_events():
+    fake = _events([
+        {"event": "on_chat_model_stream", "data": {"chunk": _Chunk("hello")}},
+        {"event": "on_tool_start", "name": "verify_graph", "data": {"input": {}}},
+        {"event": "on_tool_end", "name": "verify_graph", "data": {"output": "ok"}},
+        {"event": "on_chat_model_stream", "data": {"chunk": _Chunk(" world")}},
+    ])
+    events = [e for e in _run(run_agent(fake, "hi"))]
+    assert [e.type for e in events] == ["text_delta", "tool_call", "tool_result", "text_delta", "done"]
+    assert events[0].delta == "hello"
+    assert events[2].output == "ok"
+
+
+def test_run_agent_maps_errors():
+    fake = _events([
+        {"event": "on_chain_error", "error": "boom"},
+    ])
+    events = [e for e in _run(run_agent(fake, "hi"))]
     assert any(isinstance(e, ErrorEvent) for e in events)
     assert events[-1].type == "done"
 
 
-def test_event_to_dict_includes_type():
-    assert simple_agent.event_to_dict(TextDeltaEvent(delta="hi")) == {
-        "type": "text_delta",
-        "delta": "hi",
-    }
+class _ScriptedModel:
+    """Minimal fake chat model: emits scripted tool calls, then a final answer."""
+
+    def __init__(self, tool_calls, final_answer):
+        self._tool_calls = list(tool_calls)
+        self._final_answer = final_answer
+
+    def bind_tools(self, tools):
+        return self
+
+    def invoke(self, messages):
+        if self._tool_calls:
+            name, args = self._tool_calls.pop(0)
+            return AIMessage(
+                content="",
+                tool_calls=[{"name": name, "args": args, "id": f"call-{len(self._tool_calls)}"}],
+            )
+        return AIMessage(content=self._final_answer)
+
+
+async def _echo_tool(text: str) -> str:
+    return f"echo:{text}"
+
+
+def test_agent_end_to_end_tool_then_answer():
+    tools = [
+        StructuredTool.from_function(coroutine=_echo_tool, name="echo", description="Echo a string.")
+    ]
+    agent = build_agent(
+        tools,
+        model=_ScriptedModel([("echo", {"text": "hi"})], "the final answer"),
+    )
+    events = [e for e in _run(run_agent(agent, "hello"))]
+    types = [e.type for e in events]
+    assert "tool_call" in types
+    assert "tool_result" in types
+    assert any(e.type == "text_delta" and e.delta == "the final answer" for e in events)
+    assert types[-1] == "done"
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [ ] **Step 2: Run test to verify it fails**
 
-Run: `pytest tests/test_simple_agent.py -q`
-Expected: FAIL with `ModuleNotFoundError: No module named 'app.agents.simple_agent'`.
+Run: `pytest tests/test_agent_graph.py -q`
+Expected: FAIL with `ModuleNotFoundError: No module named 'app.agents.graph'`.
 
 - [ ] **Step 3: Write minimal implementation**
 
-Create `backend/app/agents/simple_agent.py`:
+Create `backend/app/agents/graph.py`:
 
 ```python
-"""Bounded, stateless agent loop that streams typed events for SSE."""
-from dataclasses import asdict, dataclass
-from typing import Any, AsyncGenerator, Dict, Literal
-import asyncio
+"""LangGraph agent construction and ClaimGraph SSE event streaming."""
 import logging
+from typing import Any, AsyncGenerator, List
 
-from pydantic import BaseModel, Field
-from typing_extensions import Annotated
-from sqlalchemy.orm import Session
+from langchain_core.language_models import BaseChatModel
+from langchain_core.tools import StructuredTool
+from langgraph.graph import START, MessagesState, StateGraph
+from langgraph.graph.state import CompiledStateGraph
+from langgraph.prebuilt import ToolNode, tools_condition
 
-from app.agents.tools import AGENT_SYSTEM_PROMPT, TOOLS, Tool
-from app.llm.structured import chat_structured
+from app.agents.events import (
+    AgentStreamEvent,
+    DoneEvent,
+    ErrorEvent,
+    TextDeltaEvent,
+    ToolCallEvent,
+    ToolResultEvent,
+)
+from app.agents.tools import AGENT_SYSTEM_PROMPT
+from app.core.settings import settings
 
 logger = logging.getLogger(__name__)
 
-MAX_ITERATIONS = 10
+RECURSION_LIMIT = 25
 
 
-class FinalAnswer(BaseModel):
-    type: Literal["answer"] = "answer"
-    answer: str
+def build_model() -> BaseChatModel:
+    """Provider-aware chat model (OpenAI-compatible first)."""
+    if settings.llm_provider == "google":
+        from langchain_google_genai import ChatGoogleGenerativeAI
+
+        return ChatGoogleGenerativeAI(
+            model=settings.llm_model_name,
+            api_key=settings.llm_api_key,
+        )
+    from langchain_openai import ChatOpenAI
+
+    return ChatOpenAI(
+        model=settings.llm_model_name,
+        api_key=settings.llm_api_key,
+        base_url=settings.llm_base_url,
+    )
 
 
-class ToolCall(BaseModel):
-    type: Literal["tool_call"] = "tool_call"
-    tool_name: str
-    arguments: Dict[str, Any]
+def build_agent(
+    tools: List[StructuredTool],
+    model: BaseChatModel | None = None,
+) -> CompiledStateGraph:
+    """Compile the LangGraph ReAct agent: model node + tools node."""
+    if model is None:
+        model = build_model()
+    bound = model.bind_tools(tools)
+
+    def call_model(state: MessagesState):
+        return {"messages": [bound.invoke(state["messages"])]}
+
+    builder = StateGraph(MessagesState)
+    builder.add_node("agent", call_model)
+    builder.add_node("tools", ToolNode(tools))
+    builder.add_edge(START, "agent")
+    builder.add_conditional_edges("agent", tools_condition)
+    builder.add_edge("tools", "agent")
+    return builder.compile()
 
 
-AgentDecision = Annotated[FinalAnswer | ToolCall, Field(discriminator="type")]
-
-
-@dataclass
-class TextDeltaEvent:
-    type: Literal["text_delta"] = "text_delta"
-    delta: str = ""
-
-
-@dataclass
-class ToolCallEvent:
-    type: Literal["tool_call"] = "tool_call"
-    name: str = ""
-    arguments: Dict[str, Any] = None  # type: ignore[assignment]
-
-
-@dataclass
-class ToolResultEvent:
-    type: Literal["tool_result"] = "tool_result"
-    name: str = ""
-    output: str = ""
-
-
-@dataclass
-class ErrorEvent:
-    type: Literal["error"] = "error"
-    message: str = ""
-
-
-@dataclass
-class DoneEvent:
-    type: Literal["done"] = "done"
-
-
-AgentStreamEvent = (
-    TextDeltaEvent | ToolCallEvent | ToolResultEvent | ErrorEvent | DoneEvent
-)
-
-
-def event_to_dict(event: AgentStreamEvent) -> Dict[str, Any]:
-    """Serialize an event for the SSE payload, including its ``type`` field."""
-    data = asdict(event)
-    data["type"] = event.type
-    return data
-
-
-class SimpleAgent:
-    def __init__(
-        self,
-        db: Session,
-        workspace_id: str,
-        *,
-        tools: Dict[str, Tool] | None = None,
-        max_iterations: int = MAX_ITERATIONS,
+async def run_agent(
+    agent: CompiledStateGraph,
+    user_message: str,
+) -> AsyncGenerator[AgentStreamEvent, None]:
+    """Stream a single agent run as ClaimGraph SSE events, ending with done."""
+    async for event in agent.astream_events(
+        {"messages": [("system", AGENT_SYSTEM_PROMPT), ("user", user_message)]},
+        config={"recursion_limit": RECURSION_LIMIT},
+        version="v2",
     ):
-        self.db = db
-        self.workspace_id = workspace_id
-        self.tools = tools or TOOLS
-        self.max_iterations = max_iterations
-
-    async def stream(self, user_message: str) -> AsyncGenerator[AgentStreamEvent, None]:
-        """Run the agent loop, yielding events; ends with a ``DoneEvent``."""
-        messages: list[dict] = [{"role": "user", "content": user_message}]
-        for _ in range(self.max_iterations):
-            try:
-                decision = await asyncio.to_thread(
-                    chat_structured, AGENT_SYSTEM_PROMPT, messages, AgentDecision
-                )
-            except Exception as exc:
-                logger.warning("agent LLM call failed: %s", exc)
-                yield ErrorEvent(message=f"LLM call failed: {type(exc).__name__}: {exc}")
-                yield DoneEvent()
-                return
-
-            if decision.type == "answer":
-                yield TextDeltaEvent(delta=decision.answer)
-                yield DoneEvent()
-                return
-
-            yield ToolCallEvent(name=decision.tool_name, arguments=decision.arguments)
-            output = await self._dispatch(decision.tool_name, decision.arguments)
-            yield ToolResultEvent(name=decision.tool_name, output=output)
-            messages.append(
-                {
-                    "role": "user",
-                    "content": f"Tool {decision.tool_name} returned: {output}",
-                }
-            )
-
-        yield ErrorEvent(message=f"Agent exceeded {self.max_iterations} iterations.")
-        yield DoneEvent()
-
-    async def _dispatch(self, name: str, raw_arguments: Dict[str, Any]) -> str:
-        tool = self.tools.get(name)
-        if tool is None:
-            return f"Unknown tool: {name}. Available tools: {', '.join(sorted(self.tools))}."
+        kind = event.get("event")
         try:
-            args = tool.input_schema.model_validate(raw_arguments)
-            return await tool.func(
-                db=self.db, workspace_id=self.workspace_id, args=args
-            )
-        except Exception as exc:
-            logger.warning("tool %s failed: %s", name, exc)
-            return f"Tool {name} raised: {type(exc).__name__}: {exc}"
+            if kind == "on_chat_model_stream":
+                chunk = event["data"].get("chunk")
+                content = getattr(chunk, "content", "")
+                if content:
+                    yield TextDeltaEvent(delta=str(content))
+            elif kind == "on_tool_start":
+                yield ToolCallEvent(
+                    name=event.get("name", ""),
+                    arguments=event.get("data", {}).get("input") or {},
+                )
+            elif kind == "on_tool_end":
+                yield ToolResultEvent(
+                    name=event.get("name", ""),
+                    output=str(event.get("data", {}).get("output", "")),
+                )
+            elif kind == "on_tool_error":
+                yield ToolResultEvent(
+                    name=event.get("name", ""),
+                    output=f"Tool error: {event.get('error', 'unknown')}",
+                )
+            elif kind == "on_chain_error":
+                yield ErrorEvent(message=str(event.get("error", "agent error")))
+        except Exception as exc:  # never let a mapping bug kill the stream
+            logger.warning("agent event mapping failed: %s", exc)
+    yield DoneEvent()
 ```
+
+> **Note for the implementer:** the `astream_events` event names/payloads (`on_chat_model_stream`, `on_tool_start`, `on_tool_end`, `on_tool_error`, `on_chain_error`, `data.chunk.content`) are LangChain's `version="v2"` contract. If a name drifts in the installed LangGraph version, adjust the constants in `run_agent`; the tests in Step 1 pin the mapping behavior.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `pytest tests/test_simple_agent.py -q`
+Run: `pytest tests/test_agent_graph.py -q`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add app/agents/simple_agent.py tests/test_simple_agent.py
-git commit -m "feat(agents): add bounded async agent loop with SSE events"
+git add app/agents/graph.py tests/test_agent_graph.py
+git commit -m "feat(agents): add LangGraph agent build and SSE event streaming"
 ```
 
 ---
 
-### Task 10: SSE chat endpoint
+### Task 8: SSE chat endpoint
 
 **Files:**
 - Create: `backend/app/api/routes/agents.py`
@@ -1664,7 +1532,7 @@ git commit -m "feat(agents): add bounded async agent loop with SSE events"
 - Modify: `backend/app/api/routes/__init__.py:1-5`
 
 **Interfaces:**
-- Consumes: `SimpleAgent`, `event_to_dict` from Task 9; `workspace_crud.get_workspace`; `WorkspaceNotFoundError`.
+- Consumes: `build_tools`, `build_agent`, `run_agent`, `event_to_dict`, `workspace_crud.get_workspace`, `WorkspaceNotFoundError`.
 - Produces: `POST /api/workspaces/{workspace_id}/chat` returning `text/event-stream`. Body: `{"message": string}`.
 
 - [ ] **Step 1: Write the failing test**
@@ -1676,14 +1544,16 @@ from tests.test_api import create_workspace
 
 
 def test_chat_streams_text_and_done_events(client, monkeypatch):
-    from app.agents import simple_agent
+    from app.agents.events import DoneEvent, TextDeltaEvent
+    from app.api.routes import agents as routes_agents
 
     ws_id = create_workspace(client).json()["id"]
 
-    def fake_structured(system, messages, response_model, **kwargs):
-        return simple_agent.FinalAnswer(answer="hello there")
+    async def fake_run_agent(agent, message):
+        yield TextDeltaEvent(delta="hello there")
+        yield DoneEvent()
 
-    monkeypatch.setattr(simple_agent, "chat_structured", fake_structured)
+    monkeypatch.setattr(routes_agents, "run_agent", fake_run_agent)
 
     resp = client.post(f"/api/workspaces/{ws_id}/chat", json={"message": "hi"})
     assert resp.status_code == 200
@@ -1701,7 +1571,7 @@ def test_chat_returns_404_for_missing_workspace(client):
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/test_agents_api.py -q`
-Expected: FAIL with `AssertionError: 404 != 200` (route not found → 404 on the app for the missing route; the create workspace call succeeds).
+Expected: FAIL with `AssertionError: 404 != 200` (route not found).
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -1717,7 +1587,9 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.agents.simple_agent import SimpleAgent, event_to_dict
+from app.agents.events import event_to_dict
+from app.agents.graph import build_agent, run_agent
+from app.agents.tools import build_tools
 from app.core.exceptions import WorkspaceNotFoundError
 from app.db.crud import workspace as workspace_crud
 from app.db.database import get_db
@@ -1740,10 +1612,11 @@ async def chat(
     if workspace_crud.get_workspace(db, workspace_id) is None:
         raise WorkspaceNotFoundError()
 
-    agent = SimpleAgent(db=db, workspace_id=workspace_id)
+    tools = build_tools(db, workspace_id)
+    agent = build_agent(tools)
 
     async def event_stream():
-        async for event in agent.stream(payload.message):
+        async for event in run_agent(agent, payload.message):
             yield f"data: {json.dumps(event_to_dict(event), ensure_ascii=False)}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
@@ -1779,7 +1652,7 @@ git commit -m "feat(api): add SSE agent chat endpoint"
 
 ---
 
-### Task 11 (optional): Frontend SSE chat client and component
+### Task 9 (optional): Frontend SSE chat client and component
 
 **Files:**
 - Modify: `frontend/src/api/client.ts`
@@ -1787,17 +1660,21 @@ git commit -m "feat(api): add SSE agent chat endpoint"
 - Modify: `frontend/src/components/inspector/GraphChatSection.tsx`
 
 **Interfaces:**
-- Consumes: `POST /api/workspaces/{id}/chat` from Task 10; the `AgentEvent` SSE payload shapes from Task 9's `event_to_dict`.
+- Consumes: `POST /api/workspaces/{id}/chat` from Task 8; the `AgentEvent` SSE payload shapes from Task 5's `event_to_dict`.
 - Produces: `chatWorkspace(workspaceId, message, onEvent)`, a self-contained `AgentChat` component.
 
 > Deferred wiring: hosting the component requires a screen that knows the current `workspaceId` and can re-fetch the workspace payload after an edit/recompile. The inspector currently only receives `node`, not the workspace id — threading that plus the re-fetch is a follow-up and NOT part of this task. This task delivers the client + component only.
 
 - [ ] **Step 1: Add the SSE client to `frontend/src/api/client.ts`**
 
+Add to `ENDPOINTS`:
+
 ```ts
 chatWorkspace: (workspaceId: string) =>
   `${API_BASE_URL}/api/workspaces/${workspaceId}/chat`,
 ```
+
+Add:
 
 ```ts
 export type AgentEvent =
@@ -1838,8 +1715,6 @@ export async function chatWorkspace(
 ```
 
 - [ ] **Step 2: Create `frontend/src/components/inspector/AgentChat.tsx`**
-
-A minimal self-contained panel: message input, event list, auto-scroll. Renders `text_delta` deltas appended to the current assistant message, and surfaces `tool_call`/`tool_result` as small status lines.
 
 ```tsx
 import { useState } from 'react'
@@ -1949,10 +1824,10 @@ git commit -m "feat(frontend): add agent chat SSE client and component"
 ## Verification checklist (run before claiming completion)
 
 - `pytest tests -q` from `backend/` — all pass.
-- `npm run typecheck` from `frontend/` (if Task 11 done) — passes.
-- Manual smoke: create workspace → upload a PDF → compile → `POST /api/workspaces/{id}/chat` with a message; confirm SSE events stream and the workspace graph round-trips through an edit.
+- `npm run typecheck` from `frontend/` (if Task 9 done) — passes.
+- Manual smoke: create workspace → upload a PDF → compile → `POST /api/workspaces/{id}/chat` with a message; confirm SSE events stream (tool calls + token deltas) and the workspace graph round-trips through an edit.
 
 ## Self-review notes
 
-- Spec coverage: `app/llm/client_factory.py` (Task 1), `structured.py` (Task 2), `graph_service` refactor (Task 3), `reactflow.py` extraction (Task 4), tool registry + 6 tools (Tasks 5-8), `simple_agent.py` loop + events (Task 9), SSE route (Task 10), settings fields (Tasks 1-2), test-seam migration (Tasks 3-4). Frontend SSE consumption (Task 11, optional, deferred wiring). Conversation persistence, LangGraph, search_documents, Anthropic adapter, checkpointing — intentionally out of scope per spec.
-- Type consistency: all tool functions share `(db, workspace_id, args)`; `chat_structured(system, messages, response_model, **kwargs)` everywhere; `AgentStreamEvent` names match `event_to_dict`.
+- Spec coverage: `app/llm/client_factory.py` (Task 1), `structured.py` (Task 2), `graph_service` refactor (Task 3), `reactflow.py` extraction (Task 4), `events.py` (Task 5), `tools.py` + six tools + pure mutation logic (Task 6), `graph.py` LangGraph agent + `run_agent` (Task 7), SSE route (Task 8), settings fields (Tasks 1-2), test-seam migration (Tasks 3-4). Frontend SSE consumption (Task 9, optional, deferred wiring). Conversation persistence, `search_documents`, LangChain migration of extraction, checkpointer, human-in-the-loop, sub-agents — intentionally out of scope per spec.
+- Type consistency: `chat_structured(system, messages, response_model, **kwargs)` everywhere; `build_tools(db, workspace_id) -> list[StructuredTool]`; `build_agent(tools, model=None)`; `run_agent(agent, user_message) -> AsyncGenerator[AgentStreamEvent, None]`; `AgentStreamEvent` names match `event_to_dict` and the frontend `AgentEvent` union.
