@@ -27,8 +27,7 @@ def generate_claim_graph(documents) -> GraphPayload:
     """
     start = time.perf_counter()
     logger.info(
-        "generate_claim_graph entry provider=%s model=%s documents=%d",
-        settings.llm_provider,
+        "generate_claim_graph entry model=%s documents=%d",
         settings.llm_model_name,
         len(documents),
     )

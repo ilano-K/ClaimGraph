@@ -33,8 +33,7 @@ def chat_structured(
     """
     start = time.perf_counter()
     logger.info(
-        "chat_structured entry provider=%s model=%s",
-        settings.llm_provider,
+        "chat_structured entry model=%s",
         settings.llm_model_name,
     )
     client = get_client()
