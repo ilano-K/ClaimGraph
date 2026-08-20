@@ -80,7 +80,7 @@ export function mapGraphPayload(payload: GraphPayload): MappedGraph {
         tone,
         badgeLabel,
         meta: document ? document.metadata.title : 'Unverified source',
-        synthesis: document?.executive_summary ?? '',
+        synthesis: node.summary,
         quoteSource: document ? `Source: ${sourceTitle}` : '',
         thread: [],
         citations: [
