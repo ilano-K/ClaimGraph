@@ -221,8 +221,14 @@ export default function GraphCanvas({
     return () => observer.disconnect()
   }, [fitToContent])
 
+  // Refit only when the refit signal actually changes, not when `fitToContent`
+  // is rebuilt (hovering a collapsed node resizes the card and changes its
+  // identity on every size report). `lastRefitRef` records the last handled
+  // signal so repeated identity changes can't snap the view back out of a zoom.
+  const lastRefitRef = useRef(0)
   useEffect(() => {
-    if (refitSignal <= 0) return
+    if (refitSignal <= 0 || refitSignal === lastRefitRef.current) return
+    lastRefitRef.current = refitSignal
     hasFittedRef.current = false
     fitToContent()
   }, [refitSignal, fitToContent])
