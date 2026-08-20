@@ -31,3 +31,22 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def ensure_document_graph_payload_column() -> None:
+    """Add the ``documents.graph_payload`` JSON column to existing databases.
+
+    ``Base.metadata.create_all`` only creates missing tables — it never alters
+    existing ones — so databases created before the per-document analysis model
+    need an additive ``ALTER TABLE`` on startup.
+    """
+    with engine.connect() as conn:
+        columns = {
+            row[1]
+            for row in conn.exec_driver_sql("PRAGMA table_info(documents)").fetchall()
+        }
+        if "graph_payload" not in columns:
+            conn.exec_driver_sql(
+                "ALTER TABLE documents ADD COLUMN graph_payload JSON"
+            )
+            conn.commit()

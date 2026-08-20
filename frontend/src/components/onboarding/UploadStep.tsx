@@ -11,6 +11,7 @@ const FILE_ICON: Record<string, string> = {
 interface UploadStepProps {
   files: UploadedFile[]
   error: string | null
+  isSubmitting: boolean
   onAdd: (files: File[]) => void
   onRemove: (id: string) => void
   onProcess: () => void
@@ -19,14 +20,14 @@ interface UploadStepProps {
 }
 
 /**
- * Upload (Step 2) screen. Drag-and-drop zone plus a real hidden file picker
- * (PDF/DOCX only). Selected files are listed with remove controls and handed
- * back up to the orchestrator, which uploads and compiles them against the
- * created workspace.
+ * Upload (Step 3) screen. Drag-and-drop zone plus a real hidden file picker
+ * (PDF/DOCX only). Selected files are uploaded to the created workspace and
+ * left un-analyzed; the project space handles per-document analysis.
  */
 export default function UploadStep({
   files,
   error,
+  isSubmitting,
   onAdd,
   onRemove,
   onProcess,
@@ -196,16 +197,19 @@ export default function UploadStep({
             <button
               type="button"
               onClick={onProcess}
-              disabled={count === 0}
+              disabled={count === 0 || isSubmitting}
               className={cn(
                 'font-label-md text-label-md px-8 py-3 rounded-lg flex items-center gap-2 transition-all',
-                count === 0
+                count === 0 || isSubmitting
                   ? 'bg-surface-variant text-on-surface-variant opacity-50 cursor-not-allowed border border-outline-variant/30'
                   : 'bg-primary-container text-on-primary-container kinetic-glow active:scale-95 border border-transparent'
               )}
             >
-              Process {count > 0 ? `${count} File${count === 1 ? '' : 's'}` : 'Files'}
-              <Icon name="arrow_forward" className="text-[18px]" />
+              {isSubmitting && <Icon name="sync" className="text-[18px] animate-spin" />}
+              {isSubmitting
+                ? 'Uploading…'
+                : `Upload ${count > 0 ? `${count} File${count === 1 ? '' : 's'}` : 'Files'}`}
+              {!isSubmitting && <Icon name="arrow_forward" className="text-[18px]" />}
             </button>
           </div>
         </div>

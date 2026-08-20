@@ -22,15 +22,15 @@ from fastapi import UploadFile
 from typing import List 
 import shutil 
 import uuid
-from app.enums.workspace import DocumentStatus, WorkspaceStatus
+from app.enums.workspace import DocumentStatus
 from app.db.models import Document
-from app.services.parsers import parse_document_to_markdown
+from app.services.parsers import parse_document
 from pathlib import Path
 from app.services.graph_service import generate_claim_graph
 from app.schemas.graph import GraphNode, GraphEdge
 from app.schemas.graph import GraphPayload
 from app.services.reactflow import to_react_flow_edges, to_react_flow_nodes
-from app.services.text_cleanup import normalize_graph_payload
+from app.db.fts import insert_chunks_to_fts, has_fts_document
 from sqlalchemy.exc import SQLAlchemyError
 import logging
 import time
@@ -43,28 +43,19 @@ def _elapsed_ms(start: float) -> int:
 
 def get_all_workspaces(db: Session):
     try:
-        workspaces = workspace_crud.get_all_workspaces(db)
-
-        # Rows persisted before entity decoding existed (or written by older
-        # LLM runs) can still hold `&#39;`-style text in their graph payload.
-        # Normalize on read so the dashboard never renders raw entities.
-        for workspace in workspaces:
-            payload = workspace.graph_payload
-            if not payload:
-                continue
-            try:
-                model = GraphPayload.model_validate(payload)
-            except Exception:
-                logger.warning(
-                    "get_all_workspaces skipping normalization for workspace=%s",
-                    workspace.id,
-                )
-                continue
-            workspace.graph_payload = normalize_graph_payload(model).model_dump(mode="json")
-
-        return workspaces
+        return workspace_crud.get_all_workspaces(db)
     except SQLAlchemyError as exc:
         raise WorkspaceRetrievalError() from exc
+
+
+def get_workspace_detail(db: Session, workspace_id: str) -> Workspace:
+    """Fetch a workspace with its documents, or raise if it does not exist."""
+    workspace = workspace_crud.get_workspace(db, workspace_id)
+    if workspace is None:
+        raise WorkspaceNotFoundError()
+    # Touch the relationship so the response serializer always has it loaded.
+    _ = workspace.documents
+    return workspace
         
 
 def create_workspace(db: Session, request: WorkspaceCreateRequest) -> Workspace:
@@ -90,87 +81,88 @@ def create_workspace(db: Session, request: WorkspaceCreateRequest) -> Workspace:
         raise WorkspaceCreationError()
 
 
-def recompile_workspace(db: Session, workspace_id: str):
-    workspace = workspace_crud.get_workspace(db, workspace_id)
-    if workspace is None:
-        raise WorkspaceNotFoundError()
-    
-    workspace.status = WorkspaceStatus.COMPILING
-    workspace.graph_payload = None
-    db.commit()
-    
-    return compile_workspace(db, workspace_id)
-
-def compile_workspace(db: Session, workspace_id: str):
+def compile_document(db: Session, workspace_id: str, document_id: str):
     start = time.perf_counter()
-    logger.info("compile_workspace entry workspace_id=%s", workspace_id)
+    logger.info(
+        "compile_document entry workspace_id=%s document_id=%s",
+        workspace_id,
+        document_id,
+    )
 
-    # 1. get and check the corresponding workspace
+    # 1. get and check the workspace
     workspace = workspace_crud.get_workspace(db, workspace_id)
     if workspace is None:
         raise WorkspaceNotFoundError()
 
-    # 2. get and verify the workspace contains documents
-    documents = workspace.documents
-    if not documents or documents is None:
+    # 2. get the document and verify it belongs to the workspace
+    document = document_crud.get_document(db, document_id)
+    if document is None or document.workspace_id != workspace_id:
         raise WorkspaceDocumentNotFoundError()
-    logger.info("compile_workspace found %d document(s)", len(documents))
 
     try:
-        # 3. Mark workspace as compiling
-        workspace.status = WorkspaceStatus.COMPILING
+        # 3. check the physical file exists
+        if not Path(document.file_path).is_file():
+            raise FileNotFoundError()
+
+        # 4. Mark the document as analyzing
+        document.status = DocumentStatus.ANALYZING
         db.commit()
 
-        # 4. parse the documents
-        logger.info("compile_workspace parsing %d document(s)", len(documents))
-        parsed_documents = []
-        for doc in documents:
-            path = Path(doc.file_path)
+        # 5. Parse the document at most once (recompile fast path): when the
+        # markdown is cached AND the FTS index already holds this document,
+        # Docling can be skipped entirely.
+        if document.content and has_fts_document(db, document.id):
+            logger.info(
+                "compile_document reusing cached content + FTS for %s",
+                document.filename,
+            )
+            processed_content = document.content
+        else:
+            logger.info("compile_document running Docling on %s", document.filename)
+            markdown, chunks = parse_document(document.file_path)
+            if not document.content:
+                document.content = markdown
+            insert_chunks_to_fts(db, workspace_id, document.id, chunks)
+            processed_content = markdown
 
-            # 5. check if file exist
-            if not path.is_file():
-                raise FileNotFoundError()
-            
-            if doc.content:
-                logger.info("compile_workspace using cached markdown for %s", doc.filename)
-                processed_content = doc.content
-            else:
-                logger.info("compile_workspace running Docling on %s", doc.filename)
-                processed_content = parse_document_to_markdown(doc.file_path)
-                doc.content = processed_content
-            
-            parsed_documents.append({
-                "document_id": doc.id,
+        parsed = [
+            {
+                "document_id": document.id,
                 "content": processed_content,
-                "filename": doc.filename
-            })
-            
+                "filename": document.filename,
+            }
+        ]
 
-        # 5. Generate Graph
-        logger.info("compile_workspace generating claim graph")
-        claim_graph = generate_claim_graph(parsed_documents)
+        # 6. Generate the standalone claim graph for this single document
+        logger.info("compile_document generating claim graph")
+        claim_graph = generate_claim_graph(parsed)
 
-        # 6. validate  and remove invalid quotes
+        # 7. Validate quotes and remove invalid nodes/edges
         total_nodes = len(claim_graph.nodes)
-        claim_graph.nodes, claim_graph.edges = validate_document_quotes(parsed_documents, claim_graph)
+        claim_graph.nodes, claim_graph.edges = validate_document_quotes(parsed, claim_graph)
         logger.info(
-            "compile_workspace quote validation dropped %d invalid node(s)",
+            "compile_document quote validation dropped %d invalid node(s)",
             total_nodes - len(claim_graph.nodes),
         )
 
-        # 10. Build frontend graph
+        # 8. Build the frontend graph
         react_flow_nodes = to_react_flow_nodes(claim_graph.nodes)
         react_flow_edges = to_react_flow_edges(claim_graph.edges)
 
-        # 11. Update workspace
-        workspace.status = WorkspaceStatus.READY
-        workspace.graph_payload = claim_graph.model_dump(mode="json")
-
+        # 9. Persist the per-document result
+        document.status = DocumentStatus.READY
+        document.graph_payload = claim_graph.model_dump(mode="json")
+        document.claim_count = sum(
+            node.node_category.value == "claim" for node in claim_graph.nodes
+        )
+        document.evidence_count = sum(
+            node.node_category.value == "evidence" for node in claim_graph.nodes
+        )
         db.commit()
-        db.refresh(workspace)
+        db.refresh(document)
 
         logger.info(
-            "compile_workspace success in %dms nodes=%d edges=%d",
+            "compile_document success in %dms nodes=%d edges=%d",
             _elapsed_ms(start),
             len(claim_graph.nodes),
             len(claim_graph.edges),
@@ -184,27 +176,20 @@ def compile_workspace(db: Session, workspace_id: str):
             react_flow_edges=react_flow_edges,
         )
 
-    except FileNotFoundError:
-        logger.exception("compile_workspace failed in %dms", _elapsed_ms(start))
-        execute_rollback_on_error(db, workspace_id, workspace)
-        raise
-    except InvalidLLMResponseError:
-        logger.exception("compile_workspace failed in %dms", _elapsed_ms(start))
-        execute_rollback_on_error(db, workspace_id, workspace)
+    except (FileNotFoundError, InvalidLLMResponseError, WorkspaceCompilationError):
+        logger.exception("compile_document failed in %dms", _elapsed_ms(start))
+        mark_document_failed(db, document)
         raise
     except Exception as exc:
-        logger.exception("compile_workspace failed in %dms", _elapsed_ms(start))
-        execute_rollback_on_error(db, workspace_id, workspace)
-        raise WorkspaceCompilationError() from exc 
+        logger.exception("compile_document failed in %dms", _elapsed_ms(start))
+        mark_document_failed(db, document)
+        raise WorkspaceCompilationError() from exc
 
-def execute_rollback_on_error(db: Session, workspace_id: str, workspace: Workspace = None):
-    # fetch workspace if not passed as an argument
-    if workspace is None:
-        workspace = workspace_crud.get_workspace(db, workspace_id)
-    
-    # Set status as failed and commit on error
-    if workspace is not None:
-        workspace.status = WorkspaceStatus.FAILED
+
+def mark_document_failed(db: Session, document: Document):
+    """Set a document's status to FAILED and commit."""
+    if document is not None:
+        document.status = DocumentStatus.FAILED
         db.commit()
 def validate_document_quotes(
     documents, 
@@ -373,7 +358,7 @@ def process_upload_documents(
             workspace_id=workspace_id,
             filename=original_name,
             file_path=file_path,
-            status=DocumentStatus.QUEUED,
+            status=DocumentStatus.NOT_ANALYZED,
             claim_count=0,
             evidence_count=0,
         )

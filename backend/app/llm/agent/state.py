@@ -7,6 +7,6 @@ Intent = Literal["lookup", "other"]
 
 class State(TypedDict):
     # list of messages, processed via the add_messages reducer
-    message: Annotated[list[AnyMessage], add_messages]
+    messages: Annotated[list[AnyMessage], add_messages]
     intent: Intent | None
 

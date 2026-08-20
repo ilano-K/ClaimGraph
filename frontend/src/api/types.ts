@@ -13,6 +13,8 @@ export type NodeCategory =
 export type EdgeRelation = 'supports' | 'limits' | 'causes' | 'challenges'
 export type NodeTone = 'cyan' | 'green' | 'purple' | 'yellow' | 'amber' | 'red'
 
+export type WorkspaceDocumentStatus = 'not_analyzed' | 'analyzing' | 'ready' | 'failed'
+
 export interface DocumentMetadata {
   id: string
   title: string
@@ -56,14 +58,29 @@ export interface CompileResponse {
   graph: GraphPayload
 }
 
+export interface WorkspaceDocument {
+  id: string
+  workspace_id: string
+  filename: string
+  status: WorkspaceDocumentStatus
+  claim_count: number
+  evidence_count: number
+  graph_payload: Record<string, unknown> | null
+}
+
 export interface WorkspaceResponse {
   id: string
   name: string
   ingress_mode: string
   status: string
   graph_payload: Record<string, unknown> | null
+  documents: WorkspaceDocument[]
   created_at: string
   updated_at: string
+}
+
+export interface ChatResponse {
+  reply: string
 }
 
 /* ------------------------------------------------------------------ */

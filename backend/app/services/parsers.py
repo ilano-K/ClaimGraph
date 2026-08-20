@@ -29,26 +29,29 @@ chunker = HybridChunker(
     merge_peers=True,
 )
 
-def parse_document_to_markdown(file_path: str):
-    """Convert the file at ``file_path`` to Markdown text for LLM extraction."""
+def parse_document(file_path: str) -> tuple[str, list[str]]:
+    """Convert ``file_path`` once and return ``(markdown, chunks)``.
+
+    The Docling conversion is the expensive step (model load + inference), so
+    callers should use this single entry point and derive both the Markdown
+    (for LLM extraction / caching) and the semantic chunks (for FTS indexing)
+    from the same parsed document rather than converting the file twice.
+    """
     start = time.perf_counter()
     logger.info("parsing document: %s", file_path)
-    result = converter.convert(file_path).document.export_to_markdown()
+    result = converter.convert(file_path)
+    document = result.document
+
+    markdown = document.export_to_markdown()
+
+    chunks = []
+    for chunk in chunker.chunk(document):
+        chunks.append(chunk.text)
+
     logger.info(
-        "parsed document: %s in %dms",
+        "parsed document: %s in %dms (chunks=%d)",
         file_path,
         round((time.perf_counter() - start) * 1000),
+        len(chunks),
     )
-    return result
-
-def parse_and_chunk_document(file_path: str):
-    """Convert ``file_path`` and split it into semantic chunks (used for retrieval)."""
-    result = converter.convert(file_path)
-    doc = result.document
-    
-    chunk_generator = chunker.chunk(doc)
-    
-    chunks = []
-    for chunk in chunk_generator:
-        chunks.append(chunk)
-    return chunks
+    return markdown, chunks

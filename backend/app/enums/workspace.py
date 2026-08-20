@@ -19,10 +19,14 @@ class WorkspaceStatus(str, Enum):
     
     
 class DocumentStatus(str, Enum):
-    """Per-document processing state within a workspace."""
+    """Per-document analysis state within a workspace.
 
-    QUEUED = "QUEUED"
-    EXTRACTING = "EXTRACTING"
-    VALIDATING = "VALIDATING"
-    READY = "READY"
-    FAILED = "FAILED"
+    A document starts NOT_ANALYZED when uploaded, moves to ANALYZING while its
+    standalone claim graph is being compiled, and settles on READY (with a
+    stored ``graph_payload``) or FAILED.
+    """
+
+    NOT_ANALYZED = "not_analyzed"
+    ANALYZING = "analyzing"
+    READY = "ready"
+    FAILED = "failed"

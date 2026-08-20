@@ -1,4 +1,4 @@
-import type { CompileResponse, WorkspaceResponse } from './types'
+import type { ChatResponse, CompileResponse, WorkspaceResponse } from './types'
 
 /**
  * Base URL of the ClaimGraph backend. Override per environment as needed
@@ -9,13 +9,14 @@ export const API_BASE_URL = 'http://127.0.0.1:8000'
 /** Centralized endpoint paths so a backend re-route is a one-line change. */
 export const ENDPOINTS = {
   listWorkspaces: `${API_BASE_URL}/api/workspaces/`,
+  workspaceDetail: (workspaceId: string) => `${API_BASE_URL}/api/workspaces/${workspaceId}`,
   createWorkspace: `${API_BASE_URL}/api/workspaces/create`,
   uploadDocuments: (workspaceId: string) =>
     `${API_BASE_URL}/api/workspaces/${workspaceId}/documents/upload`,
-  compileWorkspace: (workspaceId: string) =>
-    `${API_BASE_URL}/api/workspaces/${workspaceId}/compile`,
-  recompileWorkspace: (workspaceId: string) =>
-    `${API_BASE_URL}/api/workspaces/${workspaceId}/recompile`,
+  compileDocument: (workspaceId: string, documentId: string) =>
+    `${API_BASE_URL}/api/workspaces/${workspaceId}/documents/${documentId}/compile`,
+  chatWithDocument: (workspaceId: string, documentId: string) =>
+    `${API_BASE_URL}/api/workspaces/${workspaceId}/documents/${documentId}/chat`,
 }
 
 export class ApiError extends Error {
@@ -69,6 +70,12 @@ export function createWorkspace(input: CreateWorkspaceInput): Promise<WorkspaceR
   })
 }
 
+export function getWorkspaceDetail(workspaceId: string): Promise<WorkspaceResponse> {
+  return request<WorkspaceResponse>(ENDPOINTS.workspaceDetail(workspaceId), {
+    method: 'POST',
+  })
+}
+
 export function uploadDocuments(workspaceId: string, files: File[]): Promise<unknown> {
   const form = new FormData()
   for (const file of files) {
@@ -80,14 +87,23 @@ export function uploadDocuments(workspaceId: string, files: File[]): Promise<unk
   })
 }
 
-export function compileWorkspace(workspaceId: string): Promise<CompileResponse> {
-  return request<CompileResponse>(ENDPOINTS.compileWorkspace(workspaceId), {
+export function compileDocument(
+  workspaceId: string,
+  documentId: string
+): Promise<CompileResponse> {
+  return request<CompileResponse>(ENDPOINTS.compileDocument(workspaceId, documentId), {
     method: 'POST',
   })
 }
 
-export function recompileWorkspace(workspaceId: string): Promise<CompileResponse> {
-  return request<CompileResponse>(ENDPOINTS.recompileWorkspace(workspaceId), {
+export function chatWithDocument(
+  workspaceId: string,
+  documentId: string,
+  message: string
+): Promise<ChatResponse> {
+  return request<ChatResponse>(ENDPOINTS.chatWithDocument(workspaceId, documentId), {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message }),
   })
 }

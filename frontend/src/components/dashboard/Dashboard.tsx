@@ -4,7 +4,7 @@ import DashboardSidebar from './DashboardSidebar'
 import WorkspaceFilterBar from './WorkspaceFilterBar'
 import WorkspaceCard from './WorkspaceCard'
 import Icon from '../ui/Icon'
-import { listWorkspaces, recompileWorkspace } from '../../api/client'
+import { listWorkspaces } from '../../api/client'
 import { mapWorkspaceResponse } from '../../lib/mapWorkspace'
 import type { WorkspaceResponse } from '../../api/types'
 
@@ -14,16 +14,14 @@ interface DashboardProps {
 }
 
 /**
- * Workspace Dashboard screen. Mirrors dashboard.html: fixed top bar, fixed
- * left rail, and the workspace card grid. Cards are loaded live from
- * `POST /api/workspaces/`; the grid is only populated with real data.
+ * Dashboard screen. Mirrors dashboard.html: fixed top bar, fixed left rail,
+ * and the workspace card grid. Cards are loaded live from `POST /api/workspaces/`
+ * and open their project space (document list), never a graph directly.
  */
 export default function Dashboard({ onNewWorkspace, onOpenWorkspace }: DashboardProps) {
   const [records, setRecords] = useState<WorkspaceResponse[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [recompilingId, setRecompilingId] = useState<string | null>(null)
-  const [recompileErrors, setRecompileErrors] = useState<Record<string, string>>({})
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -37,38 +35,6 @@ export default function Dashboard({ onNewWorkspace, onOpenWorkspace }: Dashboard
       setLoading(false)
     }
   }, [])
-
-  const handleRecompile = useCallback(
-    async (workspaceId: string) => {
-      if (recompilingId) return
-      setRecompilingId(workspaceId)
-      setRecompileErrors((prev) => ({ ...prev, [workspaceId]: '' }))
-      // The recompile POST only resolves once the backend finishes compiling,
-      // so optimistically flip this card to the compiling state — matching the
-      // backend's immediate status transition — and render progress in the UI.
-      setRecords((prev) =>
-        prev.map((record) =>
-          record.id === workspaceId
-            ? { ...record, status: 'compiling', graph_payload: null }
-            : record
-        )
-      )
-      try {
-        await recompileWorkspace(workspaceId)
-      } catch (err) {
-        setRecompileErrors((prev) => ({
-          ...prev,
-          [workspaceId]: err instanceof Error ? err.message : 'Recompile failed.',
-        }))
-      } finally {
-        // Refresh with server truth once the request settles: a successful
-        // compile lands as `ready`, a failed one as `failed` with the error.
-        setRecompilingId(null)
-        await load()
-      }
-    },
-    [load, recompilingId]
-  )
 
   useEffect(() => {
     void load()
@@ -130,9 +96,6 @@ export default function Dashboard({ onNewWorkspace, onOpenWorkspace }: Dashboard
                   key={card.id}
                   workspace={card}
                   onOpen={() => record && onOpenWorkspace(record)}
-                  onRecompile={() => record && handleRecompile(record.id)}
-                  isRecompiling={recompilingId === card.id}
-                  error={recompileErrors[card.id] || null}
                 />
               )
             })}

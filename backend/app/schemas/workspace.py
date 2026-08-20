@@ -5,6 +5,11 @@ from datetime import datetime
 from app.schemas.graph import DocumentAnalysis, GraphPayload
 from app.schemas.reactflow import ReactFlowEdge, ReactFlowNode
 
+class WorkspaceChatRequest(BaseModel):
+    message: str 
+    
+class WorkspaceChatResponse(BaseModel):
+    reply: str
 
 class DocumentResponse(BaseModel):
     id: str
@@ -13,19 +18,21 @@ class DocumentResponse(BaseModel):
     status: str
     claim_count: int
     evidence_count: int
-    
+    graph_payload: dict[str, Any] | None = None
+
     model_config = ConfigDict(from_attributes=True)
-    
-    
+
+
 class WorkspaceResponse(BaseModel):
-    id: str 
+    id: str
     name: str
     ingress_mode: IngressMode
     status: WorkspaceStatus
-    graph_payload: dict[str, Any] | None 
+    graph_payload: dict[str, Any] | None
     created_at: datetime
     updated_at: datetime
-    
+    documents: List[DocumentResponse] = []
+
     model_config = ConfigDict(from_attributes=True)
     
 class WorkspaceCreateRequest(BaseModel):

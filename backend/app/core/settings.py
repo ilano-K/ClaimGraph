@@ -10,7 +10,8 @@ class Settings(BaseSettings):
     """Secrets and model configuration used to talk to the LLM provider."""
 
     llm_base_url: str | None = None
-    llm_api_key: str 
+    llm_api_key: str
+    agent_llm_min_interval: float = 1.0 
     
     model_config = SettingsConfigDict(
         env_file=".env",

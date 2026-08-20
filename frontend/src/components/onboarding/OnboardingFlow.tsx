@@ -3,24 +3,17 @@ import OnboardingHeader from './OnboardingHeader'
 import WelcomeStep from './WelcomeStep'
 import CreateWorkspaceStep from './CreateWorkspaceStep'
 import UploadStep from './UploadStep'
-import ProcessingStep from './ProcessingStep'
-import ReadyStep from './ReadyStep'
-import { compileWorkspace, createWorkspace, uploadDocuments } from '../../api/client'
+import { createWorkspace, uploadDocuments } from '../../api/client'
 import type {
-  CompileResponse,
-  ProcessingPhase,
-  UploadedDocument,
   UploadedFile,
   WorkspaceResponse,
 } from '../../api/types'
-import { fileExtension, formatBytes } from '../../lib/utils'
+import { fileExtension } from '../../lib/utils'
 
 const STEPS = {
   welcome: 1,
   workspace: 2,
   upload: 3,
-  processing: 4,
-  ready: 5,
 } as const
 
 type Step = keyof typeof STEPS
@@ -28,21 +21,15 @@ type Step = keyof typeof STEPS
 interface OnboardingFlowProps {
   onOpenWorkspace: (workspace: WorkspaceResponse) => void
   onSkip: () => void
-  onGraphCompiled: (result: CompileResponse) => void
 }
 
 /**
- * Orchestrates the onboarding flow (welcome -> create workspace ->
- * upload -> processing -> ready). The workspace is created via
- * `POST /workspaces/create`; documents are uploaded and compiled through the
- * backend, and the resulting graph is handed up to `App` before the
- * workspace screen opens.
+ * Orchestrates the onboarding flow (welcome -> create workspace -> upload).
+ * The workspace is created via `POST /workspaces/create`; documents are
+ * uploaded WITHOUT compiling — the flow ends by opening the project space,
+ * where each document can be analyzed individually.
  */
-export default function OnboardingFlow({
-  onOpenWorkspace,
-  onSkip,
-  onGraphCompiled,
-}: OnboardingFlowProps) {
+export default function OnboardingFlow({ onOpenWorkspace, onSkip }: OnboardingFlowProps) {
   const [step, setStep] = useState<Step>('welcome')
   const [files, setFiles] = useState<UploadedFile[]>([])
   const [uploadError, setUploadError] = useState<string | null>(null)
@@ -51,10 +38,7 @@ export default function OnboardingFlow({
   const [workspace, setWorkspace] = useState<WorkspaceResponse | null>(null)
   const [isCreating, setIsCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
-  const [documents, setDocuments] = useState<UploadedDocument[]>([])
-  const [phase, setPhase] = useState<ProcessingPhase>('uploading')
-  const [compileError, setCompileError] = useState<string | null>(null)
-  const [compileResult, setCompileResult] = useState<CompileResponse | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
 
   const handleCreateWorkspace = async () => {
     if (isCreating) return
@@ -108,45 +92,24 @@ export default function OnboardingFlow({
 
   const handleRemoveFile = (id: string) => setFiles((prev) => prev.filter((f) => f.id !== id))
 
-  const runCompile = async (target: WorkspaceResponse) => {
-    setPhase('uploading')
-    setCompileError(null)
+  const handleFinishUpload = useCallback(async () => {
+    if (!workspace || files.length === 0 || isUploading) return
+    setIsUploading(true)
+    setUploadError(null)
     try {
-      await uploadDocuments(target.id, files.map(({ file }) => file))
-      setPhase('compiling')
-      const result = await compileWorkspace(target.id)
-      setCompileResult(result)
-      setPhase('complete')
+      // Upload only — documents sit in the project space until analyzed.
+      await uploadDocuments(workspace.id, files.map(({ file }) => file))
+      onOpenWorkspace(workspace)
     } catch (err) {
-      setCompileError(err instanceof Error ? err.message : 'Processing failed.')
-      setPhase('error')
+      setUploadError(err instanceof Error ? err.message : 'Upload failed.')
+    } finally {
+      setIsUploading(false)
     }
-  }
-
-  const handleProcessUpload = () => {
-    if (!workspace || files.length === 0) return
-    setDocuments(
-      files.map(({ id, file }) => ({
-        id,
-        name: file.name,
-        size: formatBytes(file.size),
-        kind: fileExtension(file.name),
-      }))
-    )
-    setStep('processing')
-    void runCompile(workspace)
-  }
-
-  const handleContinueReady = () => setStep('ready')
-
-  const handleOpenWorkspace = useCallback(() => {
-    if (compileResult) onGraphCompiled(compileResult)
-    if (workspace) onOpenWorkspace(workspace)
-  }, [compileResult, onGraphCompiled, onOpenWorkspace, workspace])
+  }, [workspace, files, isUploading, onOpenWorkspace])
 
   return (
     <div className="text-on-background font-body-md bg-background min-h-screen flex flex-col overflow-x-hidden antialiased">
-      <OnboardingHeader activeStep={STEPS[step]} totalSteps={5} />
+      <OnboardingHeader activeStep={STEPS[step]} totalSteps={3} />
 
       {step === 'welcome' && (
         <WelcomeStep onContinue={() => setStep('workspace')} onSkip={onSkip} />
@@ -170,31 +133,12 @@ export default function OnboardingFlow({
         <UploadStep
           files={files}
           error={uploadError}
+          isSubmitting={isUploading}
           onAdd={handleAddFiles}
           onRemove={handleRemoveFile}
-          onProcess={handleProcessUpload}
+          onProcess={() => void handleFinishUpload()}
           onBack={() => setStep('workspace')}
           onSkip={onSkip}
-        />
-      )}
-
-      {step === 'processing' && (
-        <ProcessingStep
-          documents={documents}
-          phase={phase}
-          error={compileError}
-          onRetry={() => workspace && void runCompile(workspace)}
-          onBackToUpload={() => setStep('upload')}
-          onContinue={handleContinueReady}
-        />
-      )}
-
-      {step === 'ready' && (
-        <ReadyStep
-          documents={compileResult?.documents ?? []}
-          workspaceName={workspaceName}
-          onOpenWorkspace={handleOpenWorkspace}
-          onAddDocuments={() => setStep('upload')}
         />
       )}
     </div>

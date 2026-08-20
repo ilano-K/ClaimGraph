@@ -5,7 +5,7 @@ then fails loudly if any input document is missing from the response (so the
 result can always be quote-validated downstream).
 """
 from app.llm.structured import chat_structured
-from app.llm.client_factory import DEFAULT_MODEL
+from app.llm.client_factory import COMPILE_MODEL
 from app.schemas.graph import GraphPayload
 from app.prompts.claim_graph import SYSTEM_PROMPT
 from app.core.exceptions import InvalidLLMResponseError
@@ -21,28 +21,54 @@ def generate_claim_graph(documents) -> GraphPayload:
     """Request a structured graph from the LLM for the parsed ``documents``.
 
     ``documents`` is a list of ``{"document_id", "content"}`` dicts serialized
-    as JSON in the user message. After the call, every input ``document_id``
-    must appear among the returned nodes' ``document_id`` fields; otherwise the
+    as JSON in the user message. LLMs are unreliable at reproducing long random
+    ids exactly, so each document is presented to the model under a short label
+    (``d1``, ``d2``, ...) and the labels are mapped back to the real
+    ``document_id`` values after the call. Every input ``document_id`` must
+    then appear among the returned nodes' ``document_id`` fields; otherwise the
     response cannot be quote-validated and ``InvalidLLMResponseError`` is raised.
     """
     start = time.perf_counter()
     logger.info(
         "generate_claim_graph entry model=%s documents=%d",
-        DEFAULT_MODEL,
+        COMPILE_MODEL,
         len(documents),
     )
+
+    real_to_label = {
+        document["document_id"]: f"d{index + 1}"
+        for index, document in enumerate(documents)
+    }
+    label_to_real = {label: real for real, label in real_to_label.items()}
+
+    labeled_documents = [
+        {
+            "document_id": real_to_label[document["document_id"]],
+            "content": document["content"],
+        }
+        for document in documents
+    ]
 
     result = chat_structured(
         system=SYSTEM_PROMPT,
         messages=[
             {
                 "role": "user",
-                "content": json.dumps(documents, ensure_ascii=False),
+                "content": json.dumps(labeled_documents, ensure_ascii=False),
             }
         ],
         response_model=GraphPayload,
         extra_body={"thinking": {"type": "disabled"}},
     )
+
+    # Translate the short labels back to the pipeline-assigned UUIDs so the
+    # payload (and any downstream document_id join) uses real ids.
+    for node in result.nodes:
+        if node.document_id in label_to_real:
+            node.document_id = label_to_real[node.document_id]
+    for document in result.documents:
+        if document.metadata.id in label_to_real:
+            document.metadata.id = label_to_real[document.metadata.id]
 
     # The LLM sometimes HTML-escapes characters in the prose it authors
     # (e.g. `Gabriela&#39;s`); decode them so stored payloads are plain text.

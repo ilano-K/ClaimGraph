@@ -66,8 +66,15 @@ class Document(Base):
     content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     filename: Mapped[str] = mapped_column(String, nullable=False)
     file_path: Mapped[str] = mapped_column(String, nullable=False)
-    status: Mapped[DocumentStatus] = mapped_column(Enum(DocumentStatus), default=DocumentStatus.QUEUED)
+    status: Mapped[DocumentStatus] = mapped_column(
+        Enum(DocumentStatus), default=DocumentStatus.NOT_ANALYZED
+    )
     claim_count: Mapped[int] = mapped_column(Integer, default=0)
     evidence_count: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Serialized GraphPayload for this document's standalone analysis. Null
+    # until the document is compiled (analyzed). Workspace.graph_payload is
+    # legacy and no longer written or read.
+    graph_payload: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
     
     
