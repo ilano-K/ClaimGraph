@@ -43,16 +43,28 @@ export default function Dashboard({ onNewWorkspace, onOpenWorkspace }: Dashboard
       if (recompilingId) return
       setRecompilingId(workspaceId)
       setRecompileErrors((prev) => ({ ...prev, [workspaceId]: '' }))
+      // The recompile POST only resolves once the backend finishes compiling,
+      // so optimistically flip this card to the compiling state — matching the
+      // backend's immediate status transition — and render progress in the UI.
+      setRecords((prev) =>
+        prev.map((record) =>
+          record.id === workspaceId
+            ? { ...record, status: 'compiling', graph_payload: null }
+            : record
+        )
+      )
       try {
         await recompileWorkspace(workspaceId)
-        await load()
       } catch (err) {
         setRecompileErrors((prev) => ({
           ...prev,
           [workspaceId]: err instanceof Error ? err.message : 'Recompile failed.',
         }))
       } finally {
+        // Refresh with server truth once the request settles: a successful
+        // compile lands as `ready`, a failed one as `failed` with the error.
         setRecompilingId(null)
+        await load()
       }
     },
     [load, recompilingId]
