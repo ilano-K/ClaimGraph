@@ -130,12 +130,21 @@ def compile_workspace(db: Session, workspace_id: str):
             # 5. check if file exist
             if not path.is_file():
                 raise FileNotFoundError()
-
+            
+            if doc.content:
+                logger.info("compile_workspace using cached markdown for %s", doc.filename)
+                processed_content = doc.content
+            else:
+                logger.info("compile_workspace running Docling on %s", doc.filename)
+                processed_content = parse_document_to_markdown(doc.file_path)
+                doc.content = processed_content
+            
             parsed_documents.append({
                 "document_id": doc.id,
-                "content": parse_document_to_markdown(doc.file_path),
+                "content": processed_content,
                 "filename": doc.filename
             })
+            
 
         # 5. Generate Graph
         logger.info("compile_workspace generating claim graph")

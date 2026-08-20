@@ -8,7 +8,8 @@ from app.db.database import Base
 from sqlalchemy import (
     String, Enum,
     DateTime, JSON,
-    Integer, ForeignKey
+    Integer, ForeignKey,
+    Text
 )
 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -62,6 +63,7 @@ class Document(Base):
         String, ForeignKey("workspaces.id"), nullable=False
     )
     workspace: Mapped["Workspace"] = relationship(back_populates="documents")
+    content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     filename: Mapped[str] = mapped_column(String, nullable=False)
     file_path: Mapped[str] = mapped_column(String, nullable=False)
     status: Mapped[DocumentStatus] = mapped_column(Enum(DocumentStatus), default=DocumentStatus.QUEUED)
