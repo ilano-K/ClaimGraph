@@ -12,6 +12,8 @@ export type NodeCategory =
   | 'consequence'
 export type EdgeRelation = 'supports' | 'limits' | 'causes' | 'challenges'
 export type NodeTone = 'cyan' | 'green' | 'purple' | 'yellow' | 'amber' | 'red'
+/** Connection-count tier relative to the most-connected node in the graph. See `lib/nodeImportance`. */
+export type ImportanceTier = 'high' | 'medium' | 'low'
 
 export type WorkspaceDocumentStatus = 'not_analyzed' | 'analyzing' | 'ready' | 'failed'
 
@@ -113,6 +115,8 @@ export interface GraphNodePresentation {
   width: number
   height: number
   tone: NodeTone
+  /** Connection-count tier ('high'/'medium'/'low') relative to this graph's most-connected node. */
+  importance: ImportanceTier
   badgeLabel: string
   meta: string
   synthesis: string

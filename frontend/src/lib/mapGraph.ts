@@ -1,6 +1,8 @@
+import { computeNodeImportance } from './nodeImportance'
 import { computeSweepLayout } from './sweepLayout'
 import type {
   DocumentAnalysis,
+  GraphEdge,
   GraphEdgeView,
   GraphNodeView,
   GraphPayload,
@@ -18,7 +20,20 @@ const NODE_CATEGORY_TONES: Record<NodeCategory, NodeTone> = {
   methodology: 'purple',
   limitation: 'yellow',
   risk: 'amber',
-  consequence: 'red',
+  consequence: 'green',
+}
+
+/**
+ * Mirrors the polarity charge defined in `backend/app/prompts/claim_graph.py`.
+ * A consequence is not inherently negative: it is positive/neutral when caused
+ * by a claim (CAUSES: CLAIM -> CONSEQUENCE) and only negative when it actively
+ * challenges a claim (CHALLENGES: CONSEQUENCE -> CLAIM).
+ */
+function resolveConsequenceTone(nodeId: string, edges: GraphEdge[]): NodeTone {
+  for (const edge of edges) {
+    if (edge.source === nodeId && edge.relation === 'challenges') return 'red'
+  }
+  return 'green'
 }
 
 const NODE_CATEGORY_LABELS: Record<NodeCategory, string> = {
@@ -52,10 +67,15 @@ function findDocument(documents: DocumentAnalysis[], documentId: string) {
  * no backend source yet (`thread`) are left empty.
  */
 export function mapGraphPayload(payload: GraphPayload): MappedGraph {
+  const importance = computeNodeImportance(
+    payload.nodes.map((node) => node.id),
+    payload.edges
+  )
+
   const positions = computeSweepLayout(
     payload.nodes.map((node) => ({
       id: node.id,
-      width: DEFAULT_CARD_WIDTH,
+      width: importance.get(node.id)?.width ?? DEFAULT_CARD_WIDTH,
       height: DEFAULT_CARD_HEIGHT,
     })),
     payload.edges.map((edge) => ({ source: edge.source, target: edge.target }))
@@ -63,8 +83,12 @@ export function mapGraphPayload(payload: GraphPayload): MappedGraph {
 
   const nodes: GraphNodeView[] = payload.nodes.map((node) => {
     const document = findDocument(payload.documents, node.document_id)
-    const tone = NODE_CATEGORY_TONES[node.node_category] ?? 'cyan'
+    const tone =
+      node.node_category === 'consequence'
+        ? resolveConsequenceTone(node.id, payload.edges)
+        : NODE_CATEGORY_TONES[node.node_category] ?? 'cyan'
     const badgeLabel = NODE_CATEGORY_LABELS[node.node_category] ?? 'CLAIM'
+    const nodeImportance = importance.get(node.id)
     const pos = positions.get(node.id)
     const x = pos?.x ?? 0
     const y = pos?.y ?? 0
@@ -75,9 +99,10 @@ export function mapGraphPayload(payload: GraphPayload): MappedGraph {
       presentation: {
         x,
         y,
-        width: 256,
+        width: nodeImportance?.width ?? DEFAULT_CARD_WIDTH,
         height: 168,
         tone,
+        importance: nodeImportance?.tier ?? 'low',
         badgeLabel,
         meta: document ? document.metadata.title : 'Unverified source',
         synthesis: node.summary,

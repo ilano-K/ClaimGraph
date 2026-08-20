@@ -1,5 +1,5 @@
 import { Fragment, memo } from 'react'
-import type { GraphEdgeView, GraphNodeView, EdgeRelation } from '../../api/types'
+import type { EdgeRelation, GraphEdgeView, GraphNodeView, NodeCategory } from '../../api/types'
 import { NODE_ACCENT } from '../../data/mockData'
 
 type EdgeState = 'normal' | 'emphasized' | 'dimmed'
@@ -13,6 +13,7 @@ function edgeState(edge: GraphEdgeView, hoveredNodeId: string | null): EdgeState
 interface EdgeLabelProps {
   edge: GraphEdgeView
   state: EdgeState
+  text: string
 }
 
 interface ConnectionLinesProps {
@@ -22,13 +23,49 @@ interface ConnectionLinesProps {
 }
 
 /**
+ * Maps each source-category -> target-category pair allowed by the backend
+ * prompt (`backend/app/prompts/claim_graph.py`, section 2) to the specific
+ * verb shown on the edge pill. The LLM only emits the coarse `relation`
+ * enum (SUPPORTS/LIMITS/CAUSES/CHALLENGES); the frontend picks the precise
+ * label since several distinct category pairs share the same relation.
+ */
+const EDGE_LABELS: Record<EdgeRelation, Partial<Record<NodeCategory, Partial<Record<NodeCategory, string>>>>> = {
+  supports: {
+    evidence: { claim: 'VALIDATES' },
+    methodology: { evidence: 'GENERATES', methodology: 'ENABLES' },
+  },
+  limits: {
+    limitation: { claim: 'CONSTRAINS', methodology: 'COMPROMISES' },
+  },
+  causes: {
+    claim: { consequence: 'PRODUCES', risk: 'INTRODUCES' },
+  },
+  challenges: {
+    evidence: { claim: 'CONTRADICTS' },
+    consequence: { claim: 'UNDERMINES' },
+  },
+}
+
+function resolveEdgeLabel(
+  relation: EdgeRelation,
+  sourceCategory: GraphNodeView['node_category'] | undefined,
+  targetCategory: GraphNodeView['node_category'] | undefined
+): string {
+  const bySource = sourceCategory && EDGE_LABELS[relation][sourceCategory]
+  const label = bySource && targetCategory ? bySource[targetCategory] : undefined
+  return label ?? relation.toUpperCase()
+}
+
+/**
  * Renders the graph edges between node cards. Each edge gets an arrowhead
  * (source -> target) and a persistent pill label showing its `relation`. The
  * line visually reflects the verb action:
  *
  * - SUPPORTS:  solid, stroke color matches the source node's accent.
  * - LIMITS:    dashed with a slow opacity pulse (yellow tint).
- * - CAUSES:    solid, red/amber tint, thicker stroke.
+ * - CAUSES:    solid, thicker stroke; green when it produces a consequence
+ *              (CLAIM -> CONSEQUENCE is positive), amber when it produces a
+ *              risk (CLAIM -> RISK is negative).
  * - CHALLENGES: dashed, red tint, thickest stroke.
  *
  * When a node is hovered, edges touching that node are `emphasized` (brighten +
@@ -37,8 +74,7 @@ interface ConnectionLinesProps {
  * pan/zoom wrapper, so its coordinate system matches the world coordinates
  * used by the node cards.
  */
-function EdgeLabel({ edge, state }: EdgeLabelProps) {
-  const text = edge.relation.toUpperCase()
+function EdgeLabel({ edge, state, text }: EdgeLabelProps) {
   const label = edge.label ?? { x: 0, y: 0 }
   const pillWidth = text.length * 7 + 16
   const pillHeight = 20
@@ -65,9 +101,11 @@ function EdgeLabel({ edge, state }: EdgeLabelProps) {
 
 const EDGE_TINT: Record<Exclude<EdgeRelation, 'supports'>, string> = {
   limits: '#FACC15',
-  causes: '#F97316',
+  causes: '#10B981',
   challenges: '#EF4444',
 }
+
+const RISK_TINT = '#F59E0B'
 
 function colorSlug(color: string) {
   return color.replace('#', '')
@@ -75,8 +113,10 @@ function colorSlug(color: string) {
 
 function ConnectionLines({ edges, nodes, hoveredNodeId }: ConnectionLinesProps) {
   const toneByNode = new Map<string, keyof typeof NODE_ACCENT>()
+  const categoryByNode = new Map<string, GraphNodeView['node_category']>()
   for (const node of nodes) {
     toneByNode.set(node.id, node.presentation.tone)
+    categoryByNode.set(node.id, node.node_category)
   }
 
   const coloredEdges = edges.map((edge) => {
@@ -84,6 +124,8 @@ function ConnectionLines({ edges, nodes, hoveredNodeId }: ConnectionLinesProps) 
     if (edge.relation === 'supports') {
       const tone = toneByNode.get(edge.source)
       color = (tone && NODE_ACCENT[tone]) || '#22D3EE'
+    } else if (edge.relation === 'causes' && categoryByNode.get(edge.target) === 'risk') {
+      color = RISK_TINT
     }
     return { ...edge, color }
   })
@@ -139,9 +181,13 @@ function ConnectionLines({ edges, nodes, hoveredNodeId }: ConnectionLinesProps) 
       <g className="edge-labels">
         {coloredEdges.map((edge) => {
           const state = edgeState(edge, hoveredNodeId)
-          return edge.relation && edge.label ? (
-            <EdgeLabel key={`label-${edge.id}`} edge={edge} state={state} />
-          ) : null
+          if (!edge.relation || !edge.label) return null
+          const text = resolveEdgeLabel(
+            edge.relation,
+            categoryByNode.get(edge.source),
+            categoryByNode.get(edge.target)
+          )
+          return <EdgeLabel key={`label-${edge.id}`} edge={edge} state={state} text={text} />
         })}
       </g>
     </svg>

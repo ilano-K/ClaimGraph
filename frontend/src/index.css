@@ -56,6 +56,18 @@ body {
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
 }
 
+/* Connection-count emphasis (see lib/nodeImportance.ts). `filter` is used
+   instead of `box-shadow` so it composes with the hover/active box-shadow
+   rules above instead of overriding them. */
+.node-card.importance-high {
+  border-width: 1.5px;
+  filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.14));
+}
+
+.node-card.importance-medium {
+  filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.07));
+}
+
 /* Connecting lines */
 .svg-container {
   position: absolute;

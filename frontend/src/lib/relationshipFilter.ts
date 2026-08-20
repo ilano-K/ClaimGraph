@@ -29,6 +29,20 @@ const RELATION_META: Record<EdgeRelation, { label: string }> = {
 const ALL_RELATIONS: EdgeRelation[] = ['supports', 'limits', 'causes', 'challenges']
 
 /**
+ * True when an edge is a methodology-to-methodology `supports` link. Those
+ * already have their own "Methodology Pipeline" filter option, so the plain
+ * "Supports" filter excludes them to avoid showing the same connections
+ * under two different filters.
+ */
+function isMethodologyToMethodology(
+  relation: EdgeRelation,
+  sourceCategory: NodeCategory | undefined,
+  targetCategory: NodeCategory | undefined
+): boolean {
+  return relation === 'supports' && sourceCategory === 'methodology' && targetCategory === 'methodology'
+}
+
+/**
  * Builds the dropdown options for the currently loaded graph. Options are
  * dynamic: a relationship slider only appears when edges of that relation are
  * actually on the canvas, the methodology pipeline only when such edges exist,
@@ -45,6 +59,15 @@ export function buildFilterOptions(
 
   const relationEdgeCounts = new Map<EdgeRelation, number>()
   for (const edge of edges) {
+    if (
+      isMethodologyToMethodology(
+        edge.relation,
+        categoryByNodeId.get(edge.source),
+        categoryByNodeId.get(edge.target)
+      )
+    ) {
+      continue
+    }
     relationEdgeCounts.set(edge.relation, (relationEdgeCounts.get(edge.relation) ?? 0) + 1)
   }
 
@@ -102,7 +125,7 @@ function matchesRule(
     case 'all':
       return true
     case 'supports':
-      return relation === 'supports'
+      return relation === 'supports' && !isMethodologyToMethodology(relation, sourceCategory, targetCategory)
     case 'limits':
       return relation === 'limits'
     case 'causes':
