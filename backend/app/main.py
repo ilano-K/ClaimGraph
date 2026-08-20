@@ -11,6 +11,7 @@ from app.api.routes import api_router
 from app.core.exceptions import AppException
 from contextlib import asynccontextmanager
 from app.db.database import Base, engine
+from app.db.fts import ensure_fts5_table
 import logging 
 import sys
 import uvicorn
@@ -31,6 +32,7 @@ logger.info("Backend starting...")
 async def lifespan(app: FastAPI):
     """Ensure all tables exist before serving traffic."""
     Base.metadata.create_all(bind=engine)
+    ensure_fts5_table(engine)
     yield
 
 app = FastAPI(title="ClaimGraph", lifespan=lifespan)
