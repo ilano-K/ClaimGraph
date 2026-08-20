@@ -43,7 +43,7 @@ def get_client():
             # upstream can turn a slow call into a 5-minute hang via the
             # SDK's ``Retry-After`` backoff. Keep the total retry budget
             # bounded at the instructor layer only.
-            max_retries=0,
+            max_retries=3,
         ),
         # MD_JSON parses the structured output client-side, so no tool/JSON
         # schema is sent to the provider. This avoids provider rejections of
