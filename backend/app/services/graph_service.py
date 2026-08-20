@@ -9,13 +9,31 @@ from app.llm.client_factory import COMPILE_MODEL
 from app.schemas.graph import GraphPayload
 from app.prompts.claim_graph import SYSTEM_PROMPT
 from app.core.exceptions import InvalidLLMResponseError
+from app.services.graph_repair import repair_graph
 from app.services.text_cleanup import normalize_graph_payload
 from app.enums.node import EdgeRelation, NodeCategory
-import json
 import logging
 import time
 
 logger = logging.getLogger(__name__)
+
+
+def format_documents(documents) -> str:
+    """Render labeled documents as delimited plain-Markdown blocks.
+
+    The user message used to be ``json.dumps`` of the documents, which showed
+    the model JSON-escaped source text (``\\n`` for every line break, ``\\"``
+    for every quotation mark) and then asked it for a quote that is an exact
+    substring of the *unescaped* original — the escaping had to be mentally
+    undone on every copy. Plain text inside an XML-style wrapper removes that
+    step, and keeps the document boundary and its id unambiguous.
+    """
+    return "\n\n".join(
+        f'<document id="{document["document_id"]}">\n'
+        f'{document["content"]}\n'
+        f'</document>'
+        for document in documents
+    )
 
 
 def compute_evidence_flags(payload: GraphPayload) -> GraphPayload:
@@ -80,7 +98,7 @@ def generate_claim_graph(documents) -> GraphPayload:
         messages=[
             {
                 "role": "user",
-                "content": json.dumps(labeled_documents, ensure_ascii=False),
+                "content": format_documents(labeled_documents),
             }
         ],
         response_model=GraphPayload,
@@ -100,6 +118,11 @@ def generate_claim_graph(documents) -> GraphPayload:
     # (e.g. `Gabriela&#39;s`); decode them so stored payloads are plain text.
     # Verbatim node quotes are intentionally left untouched.
     normalize_graph_payload(result)
+
+    # Enforce the prompt's structural invariants in code: the model emits
+    # edges outside the allowed category table, duplicates, and unconnected
+    # nodes often enough that the UI cannot be left to render them.
+    repair_graph(result)
 
     compute_evidence_flags(result)
 

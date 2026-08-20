@@ -30,6 +30,7 @@ from app.services.graph_service import generate_claim_graph
 from app.schemas.graph import GraphNode, GraphEdge
 from app.schemas.graph import GraphPayload
 from app.services.reactflow import to_react_flow_edges, to_react_flow_nodes
+from app.services.verify_quotes import repair_quotes
 from app.db.fts import insert_chunks_to_fts, has_fts_document
 from sqlalchemy.exc import SQLAlchemyError
 import logging
@@ -192,55 +193,46 @@ def mark_document_failed(db: Session, document: Document):
         document.status = DocumentStatus.FAILED
         db.commit()
 def validate_document_quotes(
-    documents, 
+    documents,
     claim_graph: GraphPayload
     ) -> tuple[List[GraphNode], List[GraphEdge]]:
-    # get list of invalid node ids
+    """Repair each node's quote against its own document, dropping the rest.
+
+    ``repair_quotes`` rewrites quotes that differ from the source only in
+    whitespace, unicode form, punctuation style, or HTML escaping, and shortens
+    a quote that overruns its support. Only nodes it cannot back at all are
+    removed — along with every edge touching them.
+    """
     invalid_node_ids = set()
-    
+
     for document in documents:
         document_id = document['document_id']
         document_markdown = document['content']
-        
+
         document_nodes = [
-            node 
+            node
             for node in claim_graph.nodes
             if node.document_id == document_id
         ]
-        
-        invalid_nodes = find_nodes_with_invalid_quotes(
+
+        invalid_nodes = repair_quotes(
             document_markdown,
             document_nodes
         )
-        
+
         invalid_node_ids.update(node.id for node in invalid_nodes)
-    
+
     nodes = [
         n for n in claim_graph.nodes if n.id not in invalid_node_ids
         ]
-    
+
     edges = [
         e for e in claim_graph.edges
         if e.source not in invalid_node_ids and e.target not in invalid_node_ids
     ]
-    
+
     return nodes, edges
-        
 
-def find_nodes_with_invalid_quotes(document: str, nodes: list[GraphNode]):
-    """Return the ``nodes`` whose ``quote`` is not found verbatim in ``document``.
-
-    Matching is case-insensitive. A node whose quote is not a substring of the
-    document is considered invalid and will be dropped from the final graph.
-    """
-    normalized_document = document.casefold()
-    
-    invalid_nodes = []
-    for node in nodes:
-        if not node.quote.casefold() in normalized_document:
-            invalid_nodes.append(node)
-    return invalid_nodes
-    
 def update_workspace(db: Session, request: WorkspaceUpdateRequest) -> Workspace:
     start = time.perf_counter()
     logger.info("update_workspace entry workspace_id=%s", request.workspace_id)
