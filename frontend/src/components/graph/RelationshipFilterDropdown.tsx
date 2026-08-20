@@ -1,24 +1,26 @@
 import { useEffect, useRef, useState } from 'react'
 import Icon from '../ui/Icon'
 import { cn } from '../../lib/utils'
-import {
-  FILTER_OPTIONS,
-  type RelationshipFilter,
-  type RelationshipFilterOption,
+import type {
+  RelationshipFilter,
+  RelationshipFilterOption,
 } from '../../lib/relationshipFilter'
 
 interface RelationshipFilterDropdownProps {
   value: RelationshipFilter
+  options: RelationshipFilterOption[]
   onChange: (filter: RelationshipFilter) => void
 }
 
 /**
- * Floating dropdown that picks the active RelationshipFilter. Mirrors the
- * `glass-panel` styling and outside-click-to-close behavior used by the
- * dashboard card menu. Rendered inside the graph viewport.
+ * Floating dropdown that picks the active RelationshipFilter. Options are
+ * computed from the live graph so only relationships actually present on the
+ * canvas are offered. Mirrors the `glass-panel` styling and outside-click
+ * behavior used by the dashboard card menu.
  */
 export default function RelationshipFilterDropdown({
   value,
+  options,
   onChange,
 }: RelationshipFilterDropdownProps) {
   const [open, setOpen] = useState(false)
@@ -35,7 +37,7 @@ export default function RelationshipFilterDropdown({
     return () => document.removeEventListener('mousedown', onPointerDown)
   }, [open])
 
-  const selected = FILTER_OPTIONS.find((option) => option.id === value) ?? FILTER_OPTIONS[0]
+  const selected = options.find((option) => option.id === value) ?? options[0]
 
   function selectOption(option: RelationshipFilterOption) {
     onChange(option.id)
@@ -50,12 +52,12 @@ export default function RelationshipFilterDropdown({
         onClick={() => setOpen((v) => !v)}
       >
         <Icon name="filter_list" className="text-[18px]" />
-        <span className="hidden sm:inline">{selected.label}</span>
+        <span className="hidden sm:inline">{selected?.label}</span>
         <Icon name={open ? 'expand_less' : 'expand_more'} className="text-[16px]" />
       </button>
       {open && (
         <div className="glass-panel rounded-lg p-1 flex flex-col w-64 absolute left-0 top-10 z-30">
-          {FILTER_OPTIONS.map((option) => (
+          {options.map((option) => (
             <button
               key={option.id}
               type="button"

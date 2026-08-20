@@ -6,7 +6,11 @@ import OnboardingFlow from './components/onboarding/OnboardingFlow'
 import Dashboard from './components/dashboard/Dashboard'
 import ProjectSpace from './components/project/ProjectSpace'
 import { mapGraphPayload, type MappedGraph } from './lib/mapGraph'
-import { filterGraph, type RelationshipFilter } from './lib/relationshipFilter'
+import {
+  buildFilterOptions,
+  filterGraph,
+  type RelationshipFilter,
+} from './lib/relationshipFilter'
 import type { GraphPayload, WorkspaceDocument, WorkspaceResponse } from './api/types'
 
 type Screen = 'onboarding' | 'dashboard' | 'project' | 'graph'
@@ -84,6 +88,17 @@ export default function App() {
     [graph, filter]
   )
 
+  const filterOptions = useMemo(
+    () => (graph ? buildFilterOptions(graph.nodes, graph.edges) : []),
+    [graph]
+  )
+
+  useEffect(() => {
+    if (!graph) return
+    const stillAvailable = filterOptions.some((option) => option.id === filter)
+    if (!stillAvailable && filter !== 'all') setFilter('all')
+  }, [graph, filter, filterOptions])
+
   useEffect(() => {
     if (!graph || !activeNodeId) return
     const isActiveVisible = visible.nodes.some((node) => node.id === activeNodeId)
@@ -124,6 +139,7 @@ export default function App() {
             hoveredNodeId={hoveredNodeId}
             refitSignal={refitSignal}
             filter={filter}
+            filterOptions={filterOptions}
             onFilterChange={handleFilterChange}
             onSelectNode={setActiveNodeId}
             onHoverNode={setHoveredNodeId}

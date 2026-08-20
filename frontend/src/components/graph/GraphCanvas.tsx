@@ -5,8 +5,10 @@ import FloatingControls from './FloatingControls'
 import RelationshipFilterDropdown from './RelationshipFilterDropdown'
 import ContentModeToggle from './ContentModeToggle'
 import type { ContentMode } from './ContentModeToggle'
-import { FILTER_OPTIONS } from '../../lib/relationshipFilter'
-import type { RelationshipFilter } from '../../lib/relationshipFilter'
+import type {
+  RelationshipFilter,
+  RelationshipFilterOption,
+} from '../../lib/relationshipFilter'
 import { buildEdgePath, edgeMidpoint, worldBounds } from '../../lib/graphGeometry'
 import { computeSweepLayout } from '../../lib/sweepLayout'
 import { clamp } from '../../lib/utils'
@@ -47,6 +49,7 @@ interface GraphCanvasProps {
   hoveredNodeId: string | null
   refitSignal: number
   filter: RelationshipFilter
+  filterOptions: RelationshipFilterOption[]
   onFilterChange: (filter: RelationshipFilter) => void
   onSelectNode: (id: string) => void
   onHoverNode: (id: string | null) => void
@@ -67,6 +70,7 @@ export default function GraphCanvas({
   hoveredNodeId,
   refitSignal,
   filter,
+  filterOptions,
   onFilterChange,
   onSelectNode,
   onHoverNode,
@@ -402,12 +406,16 @@ export default function GraphCanvas({
         isFullscreen={isFullscreen}
       />
       <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2">
-        <RelationshipFilterDropdown value={filter} onChange={onFilterChange} />
+        <RelationshipFilterDropdown
+          value={filter}
+          options={filterOptions}
+          onChange={onFilterChange}
+        />
         <ContentModeToggle value={contentMode} onChange={setContentMode} />
       </div>
       {filter !== 'all' && nodes.length === 0 && (
         <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 glass-panel rounded-lg px-4 py-2 font-label-sm text-on-surface-variant">
-          No {FILTER_OPTIONS.find((option) => option.id === filter)?.label ?? 'matching'}{' '}
+          No {filterOptions.find((option) => option.id === filter)?.label ?? 'matching'}{' '}
           relationships in this graph
         </div>
       )}
