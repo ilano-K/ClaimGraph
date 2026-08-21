@@ -37,7 +37,6 @@ export interface GraphNode {
   summary: string
   quote: string
   confidence_score: number
-  has_evidence: boolean
 }
 
 export interface GraphEdge {

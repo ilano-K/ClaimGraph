@@ -1,7 +1,7 @@
 import { memo, useEffect, useRef, useState, type PointerEvent } from 'react'
 import Icon from '../ui/Icon'
 import { cn, formatConfidence } from '../../lib/utils'
-import { NODE_TONES, NO_EVIDENCE_BADGE } from '../../data/mockData'
+import { NODE_TONES } from '../../data/mockData'
 import type { GraphNodeView } from '../../api/types'
 import type { ContentMode } from './ContentModeToggle'
 
@@ -84,16 +84,6 @@ function NodeCard({
           >
             {presentation.badgeLabel}
           </span>
-          {node.node_category === 'claim' && node.has_evidence === false && (
-            <span
-              className={cn(
-                'px-2 py-0.5 rounded-full font-mono text-[9px] tracking-wider whitespace-nowrap',
-                NO_EVIDENCE_BADGE
-              )}
-            >
-              NO EVIDENCE
-            </span>
-          )}
         </div>
         <Icon name="more_horiz" className="text-outline !text-[16px] shrink-0" />
       </div>

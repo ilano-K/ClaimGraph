@@ -50,9 +50,3 @@ export const NODE_ACCENT: Record<NodeTone, string> = {
   yellow: '#EAB308',
   amber: '#F59E0B',
 }
-
-/**
- * Pill style for claims with no incoming evidence edge.
- */
-export const NO_EVIDENCE_BADGE =
-  'bg-amber-500/10 border border-amber-500 text-amber-400'
