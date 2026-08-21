@@ -36,31 +36,6 @@ def format_documents(documents) -> str:
     )
 
 
-def compute_evidence_flags(payload: GraphPayload) -> GraphPayload:
-    """Mark each claim by whether an evidence node links to it.
-
-    A claim ``has_evidence`` when it is the target of a ``SUPPORTS`` or
-    ``CHALLENGES`` edge whose source is an ``evidence`` node. Non-claim nodes
-    keep their default (True). Runs after extraction so the flag is derived
-    deterministically from the graph instead of being left to the LLM.
-    """
-    evidence_node_ids = {
-        node.id
-        for node in payload.nodes
-        if node.node_category == NodeCategory.EVIDENCE
-    }
-    evidenced_claim_ids = {
-        edge.target
-        for edge in payload.edges
-        if edge.relation in (EdgeRelation.SUPPORTS, EdgeRelation.CHALLENGES)
-        and edge.source in evidence_node_ids
-    }
-    for node in payload.nodes:
-        if node.node_category == NodeCategory.CLAIM:
-            node.has_evidence = node.id in evidenced_claim_ids
-    return payload
-
-
 def generate_claim_graph(documents) -> GraphPayload:
     """Request a structured graph from the LLM for the parsed ``documents``.
 
@@ -123,8 +98,6 @@ def generate_claim_graph(documents) -> GraphPayload:
     # edges outside the allowed category table, duplicates, and unconnected
     # nodes often enough that the UI cannot be left to render them.
     repair_graph(result)
-
-    compute_evidence_flags(result)
 
     input_document_ids = {
         document["document_id"]

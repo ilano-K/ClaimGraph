@@ -20,10 +20,6 @@ class GraphNode(BaseModel):
         le=1.0,
         description="Model extraction confidence score between 0.0 and 1.0."
     )
-    has_evidence: bool = Field(
-        default=True,
-        description="Whether an evidence node links to this claim. Computed post-extraction from graph edges."
-    )
 
 """
 Represents a directional relationship between two Graph Nodes.

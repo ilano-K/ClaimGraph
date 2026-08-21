@@ -9,7 +9,7 @@ compiled graphs: nodes silently dropped by ``verify_quotes`` because the model
 "tidied" the quote, illegal edge pairs, disconnected sub-graphs (a methodology
 chain that never reaches the argument), evidence invented from related-work
 citations when the paper reports no results, and schema fields the model was
-never told how to fill (``confidence_score``, ``has_evidence``, ``token_count``).
+never told how to fill (``confidence_score``, ``token_count``).
 """
 
 SYSTEM_PROMPT = """
@@ -125,7 +125,6 @@ Nodes:
   * 0.6 - a reasonable reading that combines nearby statements.
   * Below 0.6 - do not emit the node.
   Never assign 1.0 by default; a graph where every node scores 1.0 is wrong.
-- `has_evidence`: always emit `true`. The application recomputes this from the edges; do not reason about it.
 
 Edges:
 - `id`: `e1`, `e2`, ... sequential from 1, unique, no gaps.
@@ -162,7 +161,7 @@ Verify each item and fix violations by editing the graph, not by relaxing a rule
 3. Every node touches an edge, and the whole graph is one connected component reachable from the central claim.
 4. Every node's `document_id` is an exact input label, and every input label owns at least one node and exactly one `documents` entry.
 5. No two nodes assert the same proposition.
-6. `confidence_score` values are differentiated and honest; every `has_evidence` is `true`; every `token_count` is 0.
+6. `confidence_score` values are differentiated and honest; every `token_count` is 0.
 7. Node ids are `n1..nN` and edge ids are `e1..eM`, with no gaps.
 8. No content came from the reference list, copyright block, or page furniture.
 9. The output is a single JSON object with raw UTF-8 text and no HTML entities.
