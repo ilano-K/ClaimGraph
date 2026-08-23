@@ -1,68 +1,17 @@
 import Icon from '../ui/Icon'
 import { cn } from '../../lib/utils'
-import type { WorkspaceMetric, WorkspaceSummary } from '../../data/dashboardData'
+import type { WorkspaceSummary } from '../../data/dashboardData'
 
 const INGRESS_BADGE: Record<WorkspaceSummary['ingress'], string> = {
   HTTP: 'bg-primary/10 text-primary border border-primary/30',
   MCP: 'bg-tertiary/10 text-tertiary border border-tertiary/30',
 }
 
-const METRIC_DOT: Record<string, string> = {
-  cyan: 'bg-cyan-400',
-  green: 'bg-emerald-500',
-  purple: 'bg-purple-400',
-  yellow: 'bg-yellow-400',
-  amber: 'bg-amber-400',
-  red: 'bg-red-500',
-}
-
-function MetricRow({ metric }: { metric: WorkspaceMetric }) {
-  return (
-    <div className="flex justify-between items-center">
-      <span className="flex items-center gap-1">
-        {metric.tone && (
-          <div className={cn('w-1.5 h-1.5 rounded-full', METRIC_DOT[metric.tone] ?? 'bg-error')} />
-        )}
-        {metric.label}
-      </span>
-      <span className={metric.value == null ? 'text-on-surface-variant' : 'text-on-surface'}>
-        {metric.value ?? '--'}
-      </span>
-    </div>
-  )
-}
-
-function StatusBadge({ status }: { status: WorkspaceSummary['status'] }) {
-  if (status === 'awaiting') {
-    return (
-      <div className="flex items-center gap-1.5 text-secondary font-label-sm bg-secondary/10 px-2 py-1 rounded border border-secondary/20">
-        <Icon name="hourglass_empty" className="text-[14px]" />
-        Awaiting documents
-      </div>
-    )
-  }
-  if (status === 'compiling') {
-    return (
-      <div className="flex items-center gap-1.5 text-tertiary font-label-sm bg-tertiary/10 px-2 py-1 rounded border border-tertiary/20">
-        <Icon name="sync" className="text-[14px] animate-spin" />
-        Analyzing…
-      </div>
-    )
-  }
-  if (status === 'failed') {
-    return (
-      <div className="flex items-center gap-1.5 text-error font-label-sm bg-error/10 px-2 py-1 rounded border border-error/20">
-        <Icon name="error" className="text-[14px]" />
-        Analysis failed
-      </div>
-    )
-  }
-  return (
-    <div className="flex items-center gap-1.5 text-secondary font-label-sm bg-secondary/10 px-2 py-1 rounded border border-secondary/20">
-      <Icon name="check_circle" className="text-[14px]" />
-      Open Project
-    </div>
-  )
+const STATUS_ICON: Record<WorkspaceSummary['status'], { icon: string; color: string }> = {
+  ready: { icon: 'check_circle', color: 'text-secondary' },
+  compiling: { icon: 'sync', color: 'text-tertiary animate-spin' },
+  awaiting: { icon: 'hourglass_empty', color: 'text-on-surface-variant' },
+  failed: { icon: 'error', color: 'text-error' },
 }
 
 interface WorkspaceCardProps {
@@ -70,57 +19,51 @@ interface WorkspaceCardProps {
   onOpen: () => void
 }
 
-/**
- * One project-space tile in the Dashboard grid. Cards are always openable —
- * the landing view is the project space (document list), not a graph.
- */
 export default function WorkspaceCard({ workspace, onOpen }: WorkspaceCardProps) {
+  const statusIcon = STATUS_ICON[workspace.status]
+
   return (
-    <article className="glass-panel rounded-xl overflow-hidden flex flex-col group relative">
-      <div className="p-5 border-b border-white/5 flex justify-between items-start">
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <span
-              className={cn(
-                'inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium',
-                INGRESS_BADGE[workspace.ingress]
-              )}
-            >
+    <button
+      type="button"
+      onClick={onOpen}
+      className="bg-surface-container-low rounded-xl p-5 flex flex-col gap-3 text-left border border-outline-variant/30 hover:border-primary/40 transition-all duration-200 group w-full"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <span className={cn('text-[11px] font-mono px-2 py-0.5 rounded', INGRESS_BADGE[workspace.ingress])}>
               {workspace.ingress}
             </span>
-            <span className="text-mono font-mono text-on-surface-variant">
-              Last Modified: {workspace.lastModified}
-            </span>
           </div>
-          <h2 className="font-headline-md text-headline-md text-on-surface group-hover:text-primary transition-colors">
+          <h2 className="font-headline-md text-headline-md text-on-surface group-hover:text-primary transition-colors truncate">
             {workspace.title}
           </h2>
+          <p className="text-mono text-on-surface-variant text-[11px] mt-0.5">
+            {workspace.lastModified}
+          </p>
+        </div>
+        <Icon name={statusIcon.icon} className={cn('text-[20px] shrink-0 mt-1', statusIcon.color)} />
+      </div>
+
+      <div className="flex items-center gap-4 text-label-sm text-on-surface-variant">
+        <div className="flex items-center gap-1.5">
+          <Icon name="description" className="text-[14px] text-primary" />
+          <span className="text-on-surface font-medium">{workspace.documentCount}</span>
+          <span>Documents</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Icon name="check_circle" className="text-[14px] text-secondary" />
+          <span className="text-on-surface font-medium">{workspace.analyzedCount}</span>
+          <span>Analyzed</span>
         </div>
       </div>
 
-      <div className="p-5 flex-1 flex flex-col gap-4 relative">
-        <p className="font-body-sm text-body-sm text-on-surface-variant">
-          {workspace.documentLabel}
-        </p>
-        <div className="bg-surface-container-low rounded p-3 text-mono font-mono text-label-sm text-on-surface-variant flex flex-col gap-2 border border-white/5">
-          {workspace.metrics.map((metric) => (
-            <MetricRow key={metric.label} metric={metric} />
-          ))}
-        </div>
+      <div className="flex items-center justify-end pt-2 border-t border-white/5">
+        <span className="font-label-sm text-primary group-hover:underline flex items-center gap-1">
+          Open
+          <Icon name="arrow_forward" className="text-[14px]" />
+        </span>
       </div>
-
-      <div className="px-5 py-4 bg-surface-container-low/50 border-t border-white/5 flex items-center justify-between">
-        <StatusBadge status={workspace.status} />
-        <button
-          type="button"
-          onClick={onOpen}
-          className="bg-transparent border border-primary text-primary hover:bg-primary/10 transition-colors font-label-md px-4 py-1.5 rounded flex items-center gap-2"
-          style={{ boxShadow: '0 0 10px rgba(173, 198, 255, 0.1)' }}
-        >
-          Open Project Space
-          <Icon name="arrow_forward" className="text-[16px]" />
-        </button>
-      </div>
-    </article>
+    </button>
   )
 }

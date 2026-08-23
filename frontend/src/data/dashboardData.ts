@@ -32,9 +32,9 @@ export interface WorkspaceSummary {
   ingress: 'HTTP' | 'MCP'
   title: string
   lastModified: string
-  documentLabel: string
+  documentCount: number
+  analyzedCount: number
   status: 'ready' | 'compiling' | 'awaiting' | 'failed'
-  metrics: WorkspaceMetric[]
 }
 
 export const filterOptions: FilterOption[] = [
