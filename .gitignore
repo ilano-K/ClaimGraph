@@ -17,6 +17,7 @@ __pycache__/
 /tests/
 backend/tests/
 
+.pytest_cache/
 
 
 # skiils related 
@@ -27,7 +28,8 @@ backend/tests/
 # scratch / session files
 dashboard.html
 session-*.md
-README.md
+ERROR-*.md
+summary_of_projects.md
 
 # runtime uploaded document data
 backend/claimgraph/data/
