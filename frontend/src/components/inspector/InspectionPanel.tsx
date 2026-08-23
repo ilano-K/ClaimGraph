@@ -1,15 +1,12 @@
 import { useState } from 'react'
 import Icon from '../ui/Icon'
 import DetailsSection from './DetailsSection'
-import CitationsSection from './CitationsSection'
 import GraphChatSection from './GraphChatSection'
-import InspectorFooter from './InspectorFooter'
 import { cn } from '../../lib/utils'
 import type { GraphNodeView, NodeContent } from '../../api/types'
 
 const TABS = [
   { key: 'details', icon: 'info', label: 'Details' },
-  { key: 'citations', icon: 'format_quote', label: 'Citations' },
   { key: 'chat', icon: 'bolt', label: 'Graph Chat' },
 ]
 
@@ -110,7 +107,6 @@ export default function InspectionPanel({
         {/* Chat stays mounted (hidden via CSS) so its message history survives
             tab switches; the other tabs are cheap prop-derived views. */}
         {activeTab === 'details' && <DetailsSection node={node} content={content} />}
-        {activeTab === 'citations' && <CitationsSection content={content} />}
         <div className={cn('flex flex-col flex-1 min-h-0', activeTab !== 'chat' && 'hidden')}>
           <GraphChatSection
             workspaceId={workspaceId}
@@ -119,8 +115,6 @@ export default function InspectionPanel({
           />
         </div>
       </div>
-
-      <InspectorFooter />
     </aside>
   )
 }

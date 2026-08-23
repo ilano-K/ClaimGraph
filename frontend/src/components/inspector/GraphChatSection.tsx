@@ -23,6 +23,14 @@ export default function GraphChatSection({
   const [draft, setDraft] = useState('')
   const [isSending, setIsSending] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const adjustHeight = () => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+    textarea.style.height = 'auto'
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`
+  }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -33,6 +41,7 @@ export default function GraphChatSection({
     if (!text || isSending) return
     setMessages((prev) => [...prev, { author: 'user', text }])
     setDraft('')
+    requestAnimationFrame(adjustHeight)
     setIsSending(true)
     try {
       const result = await chatWithDocument(workspaceId, documentId, text)
@@ -76,19 +85,23 @@ export default function GraphChatSection({
       </div>
 
       <div className="relative mt-4">
-        <input
-          type="text"
+        <textarea
+          ref={textareaRef}
+          rows={1}
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => {
+            setDraft(e.target.value)
+            adjustHeight()
+          }}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') {
+            if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault()
               handleSend()
             }
           }}
           placeholder={`Ask about ${documentName}...`}
           disabled={isSending}
-          className="w-full bg-transparent border-0 border-b border-outline-variant focus:border-primary focus:ring-0 pr-10 py-2 text-body-sm text-on-surface transition-colors placeholder:text-outline-variant disabled:opacity-50"
+          className="w-full bg-transparent border-0 border-b border-outline-variant focus:border-primary focus:ring-0 pr-10 py-2 text-body-sm text-on-surface transition-colors placeholder:text-outline-variant disabled:opacity-50 resize-none overflow-y-auto max-h-40"
         />
         <button
           type="button"
