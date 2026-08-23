@@ -39,7 +39,7 @@ class WorkspaceCreateRequest(BaseModel):
     name: str
     description: str
 
-class WorkspaceCompileResponse(BaseModel):
+class DocumentCompileResponse(BaseModel):
     """
     The final HTTP Response schema returned by POST /api/workspaces/compile.
     """

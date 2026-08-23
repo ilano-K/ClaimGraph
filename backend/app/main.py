@@ -8,7 +8,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from app.api.routes import api_router
-from app.core.exceptions import AppException
+from app.core.exceptions import (
+    AppException,
+    FileMissingError,
+    GraphNotFoundError,
+    NodeNotFoundError,
+    WorkspaceDocumentNotFoundError,
+    WorkspaceNotFoundError,
+)
 from contextlib import asynccontextmanager
 from app.db.database import (
     Base,
@@ -50,19 +57,29 @@ app.add_middleware(
 
 app.include_router(api_router)
 
-# Render any AppException subclass as a JSON error with its status/detail.
+# Render any AppException subclass as a JSON error. Status codes are owned by
+# the API layer; anything unmapped defaults to 500.
+_STATUS_BY_EXCEPTION: dict[type[AppException], int] = {
+    FileMissingError: 404,
+    GraphNotFoundError: 404,
+    NodeNotFoundError: 404,
+    WorkspaceDocumentNotFoundError: 404,
+    WorkspaceNotFoundError: 404,
+}
+
 @app.exception_handler(AppException)
 def app_exception_handler(req: Request, exc: AppException):
+    status_code = _STATUS_BY_EXCEPTION.get(type(exc), 500)
     logger.error(
         "AppException handled: %s %s -> %d %s",
         req.method,
         req.url.path,
-        exc.status_code,
+        status_code,
         exc.detail,
         exc_info=exc,
     )
     return JSONResponse(
-        status_code=exc.status_code,
+        status_code=status_code,
         content={"detail": exc.detail}
     )
 

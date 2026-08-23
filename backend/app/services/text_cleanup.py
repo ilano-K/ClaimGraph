@@ -6,9 +6,7 @@ from the source documents stay clean, so only the authored fields are decoded
 here — at the pipeline boundary — to keep stored payloads plain text.
 """
 from html import unescape
-
 from app.schemas.graph import GraphPayload
-
 
 def normalize_graph_payload(payload: GraphPayload) -> GraphPayload:
     """Decode HTML entities in the LLM-authored fields of ``payload`` in place.

@@ -11,7 +11,11 @@ from app.prompts.claim_graph import SYSTEM_PROMPT
 from app.core.exceptions import InvalidLLMResponseError
 from app.services.graph_repair import repair_graph
 from app.services.text_cleanup import normalize_graph_payload
-from app.enums.node import EdgeRelation, NodeCategory
+
+from app.schemas.graph import GraphNode, GraphEdge
+from app.schemas.graph import GraphPayload
+from app.services.verify_quotes import repair_quotes
+from typing import List 
 import logging
 import time
 
@@ -35,6 +39,40 @@ def format_documents(documents) -> str:
         for document in documents
     )
 
+def validate_document_quotes(
+    documents,
+    claim_graph: GraphPayload
+    ) -> tuple[List[GraphNode], List[GraphEdge]]:
+    """Repair each node's quote against its own document, dropping the rest.
+
+    ``repair_quotes`` rewrites quotes that differ from the source only in
+    whitespace, unicode form, punctuation style, or HTML escaping, and shortens
+    a quote that overruns its support. Only nodes it cannot back at all are
+    removed — along with every edge touching them.
+    """
+    invalid_node_ids = set()
+
+    for document in documents:
+        document_id = document['document_id']
+        document_markdown = document['content']
+        document_nodes = [
+            node
+            for node in claim_graph.nodes
+            if node.document_id == document_id
+        ]
+        invalid_nodes = repair_quotes(
+            document_markdown,
+            document_nodes
+        )
+        invalid_node_ids.update(node.id for node in invalid_nodes)
+    nodes = [
+        n for n in claim_graph.nodes if n.id not in invalid_node_ids
+        ]
+    edges = [
+        e for e in claim_graph.edges
+        if e.source not in invalid_node_ids and e.target not in invalid_node_ids
+    ]
+    return nodes, edges
 
 def generate_claim_graph(documents) -> GraphPayload:
     """Request a structured graph from the LLM for the parsed ``documents``.

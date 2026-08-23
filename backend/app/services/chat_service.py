@@ -1,4 +1,4 @@
-from app.schemas.workspace import WorkspaceChatRequest, WorkspaceChatResponse
+from app.schemas.workspace import WorkspaceChatRequest
 from sqlalchemy.orm import Session
 from app.llm.agent.graph import build_agent_graph
 from langchain_core.messages import HumanMessage

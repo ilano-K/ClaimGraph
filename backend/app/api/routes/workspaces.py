@@ -6,11 +6,13 @@ from app.schemas.workspace import (
     WorkspaceResponse,
     WorkspaceUpdateRequest,
     WorkspaceUploadDocumentResponse,
-    WorkspaceCompileResponse,
+    DocumentCompileResponse,
     WorkspaceChatResponse,
     WorkspaceChatRequest
 )
 from app.services import workspace_service
+from app.services import document_service
+from app.services import compilation_service
 from app.services import chat_service
 from sqlalchemy.orm import Session
 from app.db.database import get_db
@@ -70,7 +72,7 @@ def get_workspace(workspace_id: str, db: Session = Depends(get_db)):
     return result
 
 
-@router.post('/{workspace_id}/documents/{document_id}/compile', response_model=WorkspaceCompileResponse)
+@router.post('/{workspace_id}/documents/{document_id}/compile', response_model=DocumentCompileResponse)
 def compile_document(workspace_id: str, document_id: str, db: Session = Depends(get_db)):
     """Analyze a single document and build its standalone claim graph."""
     start = time.perf_counter()
@@ -80,7 +82,7 @@ def compile_document(workspace_id: str, document_id: str, db: Session = Depends(
         document_id,
     )
     try:
-        result = workspace_service.compile_document(db, workspace_id, document_id)
+        result = compilation_service.compile_document(db, workspace_id, document_id)
     except Exception:
         logger.exception("compile_document failed in %dms", _elapsed_ms(start))
         raise
@@ -116,7 +118,7 @@ def upload_documents(
         [f.filename for f in files],
     )
     try:
-        result = workspace_service.process_upload_documents(
+        result = document_service.process_upload_documents(
             db,
             workspace_id,
             files
