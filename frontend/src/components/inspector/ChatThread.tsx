@@ -1,4 +1,5 @@
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import Icon from '../ui/Icon'
 import type { ChatMessage } from '../../api/types'
 
@@ -48,6 +49,18 @@ const markdownComponents: Parameters<typeof ReactMarkdown>[0]['components'] = {
       <code className="bg-surface-container-high px-1 py-0.5 rounded font-mono text-[12px]">{children}</code>
     )
   },
+  table: ({ children }) => (
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse text-[12px] my-1">{children}</table>
+    </div>
+  ),
+  thead: ({ children }) => <thead className="text-on-surface">{children}</thead>,
+  tbody: ({ children }) => <tbody>{children}</tbody>,
+  tr: ({ children }) => <tr className="border-b border-outline-variant/40">{children}</tr>,
+  th: ({ children }) => (
+    <th className="border-b border-outline-variant px-2 py-1.5 text-left font-semibold">{children}</th>
+  ),
+  td: ({ children }) => <td className="px-2 py-1.5 align-top">{children}</td>,
 }
 
 function Message({ message }: { message: ChatMessage }) {
@@ -69,15 +82,17 @@ function Message({ message }: { message: ChatMessage }) {
       </div>
       <div
         className={
-          'rounded-lg rounded-tl-none p-3 text-body-sm whitespace-pre-wrap ' +
+          'rounded-lg rounded-tl-none p-3 text-body-sm ' +
           (isAssistant
             ? 'bg-primary-container/5 border border-primary/10 text-on-surface-variant'
-            : 'bg-surface-container')
+            : 'bg-surface-container whitespace-pre-wrap')
         }
       >
         {isAssistant ? (
           <div className="space-y-2">
-            <ReactMarkdown components={markdownComponents}>{normalizeMarkdown(message.text)}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+              {normalizeMarkdown(message.text)}
+            </ReactMarkdown>
           </div>
         ) : (
           message.text

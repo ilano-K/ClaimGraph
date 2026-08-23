@@ -4,7 +4,6 @@ import GraphCanvas from './components/graph/GraphCanvas'
 import InspectionPanel from './components/inspector/InspectionPanel'
 import OnboardingFlow from './components/onboarding/OnboardingFlow'
 import Dashboard from './components/dashboard/Dashboard'
-import ProjectSpace from './components/project/ProjectSpace'
 import { mapGraphPayload, type MappedGraph } from './lib/mapGraph'
 import {
   buildFilterOptions,
@@ -16,7 +15,12 @@ import type { GraphPayload, WorkspaceDocument, WorkspaceResponse } from './api/t
 type Screen = 'onboarding' | 'dashboard' | 'project' | 'graph'
 
 export default function App() {
-  const [screen, setScreen] = useState<Screen>('onboarding')
+  const [hasOnboarded, setHasOnboarded] = useState(() => {
+    return localStorage.getItem('claimgraph-onboarded') === 'true'
+  })
+  const [screen, setScreen] = useState<Screen>(() => {
+    return localStorage.getItem('claimgraph-onboarded') === 'true' ? 'dashboard' : 'onboarding'
+  })
   const [graph, setGraph] = useState<MappedGraph | null>(null)
   const [activeNodeId, setActiveNodeId] = useState<string | null>(null)
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null)
@@ -105,19 +109,24 @@ export default function App() {
     if (!isActiveVisible) setActiveNodeId(null)
   }, [graph, filter, activeNodeId, visible.nodes])
 
-  if (screen === 'onboarding') {
-    return <OnboardingFlow onOpenWorkspace={handleOpenWorkspace} onSkip={() => setScreen('dashboard')} />
+  const handleCompleteOnboarding = useCallback(() => {
+    localStorage.setItem('claimgraph-onboarded', 'true')
+    setHasOnboarded(true)
+    setScreen('dashboard')
+  }, [])
+
+  if (screen === 'onboarding' && !hasOnboarded) {
+    return <OnboardingFlow onOpenWorkspace={(ws) => { handleCompleteOnboarding(); handleOpenWorkspace(ws); }} onSkip={handleCompleteOnboarding} />
   }
 
-  if (screen === 'dashboard') {
+  if (screen === 'dashboard' || (screen === 'project' && workspace)) {
     return (
-      <Dashboard onNewWorkspace={() => setScreen('onboarding')} onOpenWorkspace={handleOpenWorkspace} />
-    )
-  }
-
-  if (screen === 'project' && workspace) {
-    return (
-      <ProjectSpace workspace={workspace} onBack={() => setScreen('dashboard')} onOpenGraph={handleOpenGraph} />
+      <Dashboard
+        onOpenWorkspace={handleOpenWorkspace}
+        onOpenGraph={handleOpenGraph}
+        activeWorkspace={screen === 'project' ? workspace : null}
+        onBackToDashboard={() => setScreen('dashboard')}
+      />
     )
   }
 

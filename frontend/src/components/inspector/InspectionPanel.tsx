@@ -107,15 +107,17 @@ export default function InspectionPanel({
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-6">
+        {/* Chat stays mounted (hidden via CSS) so its message history survives
+            tab switches; the other tabs are cheap prop-derived views. */}
         {activeTab === 'details' && <DetailsSection node={node} content={content} />}
         {activeTab === 'citations' && <CitationsSection content={content} />}
-        {activeTab === 'chat' && (
+        <div className={cn('flex flex-col flex-1 min-h-0', activeTab !== 'chat' && 'hidden')}>
           <GraphChatSection
             workspaceId={workspaceId}
             documentId={documentId}
             documentName={documentName}
           />
-        )}
+        </div>
       </div>
 
       <InspectorFooter />

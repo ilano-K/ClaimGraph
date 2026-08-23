@@ -117,23 +117,25 @@ export default function ProjectSpace({
 
   return (
     <div className="text-on-surface min-h-screen flex flex-col font-body-md antialiased bg-background overflow-x-hidden">
-      <header className="flex items-center justify-between px-gutter h-16 bg-surface/60 backdrop-blur-xl border-b border-white/10 shrink-0">
-        <div className="flex items-center gap-3 min-w-0">
+      <header className="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-margin-mobile md:px-margin-desktop h-16 bg-surface-container/60 backdrop-blur-xl border-b border-white/10">
+        <div className="flex items-center gap-4 flex-1 min-w-0">
           <button
             type="button"
             onClick={onBack}
-            className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-white/5 rounded-lg transition-all"
+            className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-white/5 rounded-lg transition-all shrink-0"
             aria-label="Back to dashboard"
           >
             <Icon name="arrow_back" />
           </button>
+          <div className="w-8 h-8 rounded-lg border border-outline-variant/50 bg-gradient-to-br from-primary to-primary-container flex items-center justify-center shrink-0">
+            <Icon name="folder_open" className="text-on-primary text-[18px]" />
+          </div>
           <div className="flex flex-col min-w-0">
-            <h1 className="font-headline-md text-headline-md text-on-surface truncate">
+            <h1 className="font-headline-md text-headline-md font-bold tracking-tight text-on-surface truncate">
               {workspace.name}
             </h1>
             <span className="font-mono text-mono text-on-surface-variant text-[11px]">
-              {documents.length} document{documents.length === 1 ? '' : 's'} · {analyzedCount}{' '}
-              analyzed
+              {documents.length} document{documents.length === 1 ? '' : 's'} · {analyzedCount} analyzed
             </span>
           </div>
         </div>
@@ -152,16 +154,15 @@ export default function ProjectSpace({
           type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={uploading}
-          className="bg-primary-container text-on-primary-container font-label-md px-4 py-2 rounded-lg hover:bg-primary-fixed transition-colors flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+          className="bg-primary text-on-primary hover:bg-primary-fixed transition-colors duration-200 font-label-md px-4 py-2 rounded flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+          style={{ boxShadow: '0 0 15px rgba(173, 198, 255, 0.3)' }}
         >
           <Icon name={uploading ? 'sync' : 'upload_file'} className={cn('!text-[18px]', uploading && 'animate-spin')} />
-          <span className="hidden sm:inline">{uploading ? 'Uploading…' : 'Add Documents'}</span>
+          {uploading ? 'Uploading…' : 'Add Documents'}
         </button>
       </header>
 
-      <main className="flex-1 pt-10 pb-12 px-margin-mobile md:px-margin-desktop max-w-container-max mx-auto w-full relative">
-        <div className="absolute inset-0 grid-bg pointer-events-none z-0"></div>
-
+      <main className="flex-1 pt-24 pb-12 px-margin-mobile md:px-margin-desktop max-w-container-max mx-auto w-full relative z-10">
         {loading ? (
           <div className="flex flex-col items-center justify-center gap-4 py-24 text-on-surface-variant">
             <Icon name="progress_activity" className="text-[32px] animate-spin" />
@@ -182,7 +183,7 @@ export default function ProjectSpace({
           </div>
         ) : (
           <>
-            <div className="flex flex-col gap-3 w-full relative z-10">
+            <div className="flex flex-col gap-4 w-full">
               <div className="flex justify-between items-end">
                 <span className="font-label-md text-label-md text-on-surface uppercase tracking-widest">
                   Documents
@@ -193,10 +194,11 @@ export default function ProjectSpace({
               </div>
 
               {documents.length === 0 ? (
-                <div className="flex flex-col items-center justify-center gap-4 py-20 text-on-surface-variant text-center bg-surface-container-low/40 backdrop-blur-xl border border-white/10 rounded-xl">
+                <div className="flex flex-col items-center justify-center gap-4 py-20 text-on-surface-variant text-center glass-panel rounded-xl">
                   <Icon name="inbox" className="text-[32px]" />
+                  <p className="font-headline-md text-headline-md text-on-surface">No Documents Yet</p>
                   <p className="font-body-sm text-body-sm">
-                    No documents yet. Add documents to analyze them.
+                    Add documents to this workspace to start analyzing them.
                   </p>
                   <button
                     type="button"
@@ -208,29 +210,65 @@ export default function ProjectSpace({
                   </button>
                 </div>
               ) : (
-                <div className="flex flex-col bg-surface-container-low/60 backdrop-blur-xl border border-white/10 rounded-xl overflow-hidden shadow-2xl divide-y divide-white/5">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                   {documents.map((doc) => {
                     const meta = STATUS_META[doc.status]
                     const ext = fileExtension(doc.filename)
                     return (
-                      <div key={doc.id} className="p-4 flex flex-col gap-3">
-                        <div className="flex items-center gap-4">
+                      <article key={doc.id} className="glass-panel rounded-xl overflow-hidden flex flex-col group relative">
+                        <div className="p-5 border-b border-white/5 flex items-start gap-4">
                           <div className="w-10 h-10 rounded-lg border border-primary/30 bg-primary/10 flex items-center justify-center shrink-0">
                             <Icon name={FILE_ICON[ext] ?? 'description'} className="text-primary" />
                           </div>
-                          <div className="flex flex-col gap-0.5 flex-grow min-w-0">
-                            <span className="font-label-md text-label-md text-on-surface truncate">
+                          <div className="flex flex-col gap-1 min-w-0 flex-grow">
+                            <h2 className="font-headline-md text-headline-md text-on-surface group-hover:text-primary transition-colors truncate text-base">
                               {doc.filename}
-                            </span>
-                            <span className="font-mono text-mono text-on-surface-variant opacity-70 text-[11px]">
-                              {ext.toUpperCase()} · {doc.status === 'ready'
-                                ? `${doc.claim_count} claims · ${doc.evidence_count} evidence`
-                                : meta.label}
+                            </h2>
+                            <span className="font-mono text-mono text-on-surface-variant text-[11px]">
+                              {ext.toUpperCase()}
                             </span>
                           </div>
+                        </div>
+
+                        <div className="p-5 flex-1 flex flex-col gap-3">
+                          {doc.status === 'ready' ? (
+                            <div className="bg-surface-container-low rounded p-3 text-mono font-mono text-label-sm text-on-surface-variant flex flex-col gap-2 border border-white/5">
+                              <div className="flex justify-between items-center">
+                                <span className="flex items-center gap-1">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                                  Claims
+                                </span>
+                                <span className="text-on-surface">{doc.claim_count}</span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className="flex items-center gap-1">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                  Evidence
+                                </span>
+                                <span className="text-on-surface">{doc.evidence_count}</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="font-body-sm text-body-sm text-on-surface-variant">
+                              {doc.status === 'analyzing'
+                                ? 'Analyzing document for claims and evidence…'
+                                : doc.status === 'failed'
+                                  ? 'Analysis encountered an error.'
+                                  : 'Document uploaded. Ready to analyze.'}
+                            </p>
+                          )}
+                          {analyzeErrors[doc.id] && (
+                            <div className="flex items-center gap-2 text-error text-label-sm bg-error/10 border border-error/20 rounded px-3 py-2">
+                              <Icon name="error_outline" className="text-[14px] shrink-0" />
+                              <span className="truncate">{analyzeErrors[doc.id]}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="px-5 py-4 bg-surface-container-low/50 border-t border-white/5 flex items-center justify-between">
                           <span
                             className={cn(
-                              'inline-flex items-center gap-1 px-2 py-1 rounded border font-label-sm shrink-0',
+                              'inline-flex items-center gap-1.5 px-2 py-1 rounded border font-label-sm',
                               meta.tone
                             )}
                           >
@@ -240,34 +278,27 @@ export default function ProjectSpace({
                             />
                             {meta.label}
                           </span>
-                        </div>
-                        {analyzeErrors[doc.id] && (
-                          <div className="flex items-center gap-2 text-error text-label-sm bg-error/10 border border-error/20 rounded px-3 py-2">
-                            <Icon name="error_outline" className="text-[16px] shrink-0" />
-                            {analyzeErrors[doc.id]}
-                          </div>
-                        )}
-                        <div className="flex items-center gap-3 justify-end">
                           {doc.status === 'ready' ? (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => onOpenGraph(doc)}
-                                className="bg-primary hover:bg-primary-fixed text-on-primary font-label-md px-4 py-1.5 rounded flex items-center gap-2 transition-colors"
-                              >
-                                <Icon name="open_in_new" className="text-[16px]" />
-                                Open Graph
-                              </button>
+                            <div className="flex items-center gap-2">
                               <button
                                 type="button"
                                 onClick={() => void handleAnalyze(doc)}
                                 disabled={analyzingId !== null}
-                                className="bg-transparent border border-outline-variant text-on-surface-variant hover:text-on-surface hover:border-primary/50 font-label-md px-4 py-1.5 rounded flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="text-on-surface-variant hover:text-on-surface hover:bg-white/5 p-2 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                aria-label="Re-analyze"
                               >
                                 <Icon name="sync" className="text-[16px]" />
-                                Re-analyze
                               </button>
-                            </>
+                              <button
+                                type="button"
+                                onClick={() => onOpenGraph(doc)}
+                                className="bg-transparent border border-primary text-primary hover:bg-primary/10 transition-colors font-label-md px-4 py-1.5 rounded flex items-center gap-2"
+                                style={{ boxShadow: '0 0 10px rgba(173, 198, 255, 0.1)' }}
+                              >
+                                Open Graph
+                                <Icon name="arrow_forward" className="text-[16px]" />
+                              </button>
+                            </div>
                           ) : (
                             <button
                               type="button"
@@ -280,7 +311,7 @@ export default function ProjectSpace({
                             </button>
                           )}
                         </div>
-                      </div>
+                      </article>
                     )
                   })}
                 </div>
@@ -288,7 +319,7 @@ export default function ProjectSpace({
             </div>
 
             {error && (
-              <div className="flex items-center gap-2 rounded-lg border border-error/30 bg-error-container/20 px-4 py-3 font-label-md text-label-md text-error mt-4 relative z-10">
+              <div className="flex items-center gap-2 rounded-lg border border-error/30 bg-error-container/20 px-4 py-3 font-label-md text-label-md text-error mt-4">
                 <Icon name="error" className="text-[18px] shrink-0" />
                 {error}
               </div>
